@@ -1,0 +1,25 @@
+# Core
+requests>=2.28.0
+pandas>=1.5.0
+numpy>=1.21.0
+
+# Data source (primary — free, no API key, supports .HK)
+yfinance>=0.2.0
+
+# Backtesting framework
+backtesting>=0.6.0
+
+# Alpha Vantage (backup data source)
+alpha-vantage>=3.0.0
+
+# Technical indicators: ta (no numba; used by daily_scanner)
+ta>=0.11.0
+
+# Optional: pandas_ta for backtest_options (has built-in fallbacks if not installed)
+# pandas_ta>=0.3.14b
+
+# Daily scanner scheduler
+schedule>=1.2.0
+
+# Streamlit (scanner_streamlit.py)
+streamlit>=1.28.0
