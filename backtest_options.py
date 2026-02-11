@@ -74,6 +74,16 @@ ATR_TRAIL_MULT    = 3     # Trailing stop: Highest_High - (this * ATR)
 INITIAL_CASH     = 100_000 # HK$
 COMMISSION_PCT   = 0.002   # 0.2% per trade (buy + sell)
 
+# ---- Optional toggles (override from Streamlit or tests) ----
+CORE_REQUIRE_TREND   = True   # Core: require Close > SMA20
+CORE_REQUIRE_PDI_MDI = True   # Core: require PDI > MDI
+SELL_USE_SMA20       = True   # Sell when Close < SMA20
+SELL_USE_PDI_MDI     = True   # Sell when PDI < MDI
+SELL_USE_STOP_LOSS   = True   # Sell at -STOP_LOSS_PCT
+SELL_USE_TRAILING    = True   # Sell on trailing stop (Smart Exit)
+SELL_USE_PROFIT_TAKE = True   # Sell 50% on RSI climax (Smart Exit)
+SELL_USE_MONTH_END   = True   # Force close at month-end
+
 
 # ===========================================================================
 # Part 1: Fetch Data
@@ -374,39 +384,39 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
 
             if use_smart_exit:
                 # 1. Hard Exit: trend breaker
-                if close < sma20:
+                if SELL_USE_SMA20 and close < sma20:
                     exit_reason = "Hard Exit (Close < SMA20)"
                     sell_ratio = 1.0
                 # 2. Trailing Stop
-                elif atr > 0 and close < (highest_high_since_entry - ATR_TRAIL_MULT * atr):
+                elif SELL_USE_TRAILING and atr > 0 and close < (highest_high_since_entry - ATR_TRAIL_MULT * atr):
                     exit_reason = "Trailing Stop (Close < High - 3*ATR)"
                     sell_ratio = 1.0
                 # 3. Profit Taking (50%) — only if we still have full position
-                elif position_ratio >= 1.0 and rsi > RSI_PROFIT_TAKING and close < open_:
+                elif SELL_USE_PROFIT_TAKE and position_ratio >= 1.0 and rsi > RSI_PROFIT_TAKING and close < open_:
                     exit_reason = "Profit Taking 50% (RSI>75, Bearish Candle)"
                     sell_ratio = 0.5
                 # 4. Momentum / Stop / Month-end
-                elif pdi < mdi:
+                elif SELL_USE_PDI_MDI and pdi < mdi:
                     exit_reason = "Momentum Flip (PDI < MDI)"
                     sell_ratio = 1.0
-                elif close < stop_price:
+                elif SELL_USE_STOP_LOSS and close < stop_price:
                     exit_reason = f"Stop Loss (-{STOP_LOSS_PCT*100:.0f}%)"
                     sell_ratio = 1.0
-                elif is_month_end:
+                elif SELL_USE_MONTH_END and is_month_end:
                     exit_reason = "Month-End Force Close"
                     sell_ratio = 1.0
             else:
                 # Original exit logic (SMA20-only style)
-                if close < sma20:
+                if SELL_USE_SMA20 and close < sma20:
                     exit_reason = "Trend Break (Close < SMA20)"
                     sell_ratio = 1.0
-                elif pdi < mdi:
+                elif SELL_USE_PDI_MDI and pdi < mdi:
                     exit_reason = "Momentum Flip (PDI < MDI)"
                     sell_ratio = 1.0
-                elif close < stop_price:
+                elif SELL_USE_STOP_LOSS and close < stop_price:
                     exit_reason = f"Stop Loss (-{STOP_LOSS_PCT*100:.0f}%)"
                     sell_ratio = 1.0
-                elif is_month_end:
+                elif SELL_USE_MONTH_END and is_month_end:
                     exit_reason = "Month-End Force Close"
                     sell_ratio = 1.0
 
@@ -422,9 +432,9 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
         # STATE: NO POSITION → check buy conditions (Core + Scorecard)
         # =============================================================
         else:
-            # ---- CORE (all must be true): trend floor + not overheated ----
-            core_trend = close > sma20
-            core_pdi_mdi = pdi > mdi
+            # ---- CORE (all must be true where enabled): trend floor + not overheated ----
+            core_trend = (close > sma20) if CORE_REQUIRE_TREND else True
+            core_pdi_mdi = (pdi > mdi) if CORE_REQUIRE_PDI_MDI else True
             core_adx_floor = adx > ADX_MIN   # mandatory: trend must exist
             core_adx_cap   = adx < ADX_MAX  # mandatory: not overheated
             core = core_trend and core_pdi_mdi and core_adx_floor and core_adx_cap

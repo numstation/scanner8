@@ -133,10 +133,12 @@ with tab_backtest:
         use_smart_exit = st.checkbox("Smart exit (trail + profit take)", value=True, key="bt_smart")
 
     with st.expander("Adjust criteria (Core & Scorecard)", expanded=False):
-        st.caption("Override the default thresholds to test different factors. Core: ADX range. Scorecard: RSI, MFI, RVOL; trigger = min points out of 3.")
+        st.caption("Core: turn conditions on/off or change thresholds. Scorecard: RSI, MFI, RVOL; trigger = min points out of 3.")
         c1, c2, c3 = st.columns(3)
         with c1:
-            st.markdown("**Core**")
+            st.markdown("**Core (BUY)**")
+            core_require_trend = st.checkbox("Require Close > SMA20", value=True, key="core_trend")
+            core_require_pdi_mdi = st.checkbox("Require PDI > MDI", value=True, key="core_pdi_mdi")
             adx_min = st.number_input("ADX min (trend floor)", min_value=10, max_value=40, value=20, step=1, key="adx_min")
             adx_max = st.number_input("ADX max (not overheated)", min_value=30, max_value=70, value=50, step=1, key="adx_max")
         with c2:
@@ -149,6 +151,23 @@ with tab_backtest:
             scorecard_min = st.slider("Score ≥ (out of 3)", min_value=1, max_value=3, value=2, key="scorecard_min")
             st.caption("Need at least this many of RSI/MFI/RVOL to trigger BUY (with Core true).")
 
+    with st.expander("Adjust sell rules", expanded=False):
+        st.caption("Turn exit conditions on/off and edit parameters. Order: SMA20 → Trailing → Profit take → PDI<MDI → Stop loss → Month-end.")
+        s1, s2 = st.columns(2)
+        with s1:
+            st.markdown("**Exit toggles**")
+            sell_use_sma20 = st.checkbox("Sell when Close < SMA20", value=True, key="sell_sma20")
+            sell_use_pdi_mdi = st.checkbox("Sell when PDI < MDI", value=True, key="sell_pdi_mdi")
+            sell_use_stop_loss = st.checkbox("Sell at stop loss %", value=True, key="sell_stop")
+            sell_use_trailing = st.checkbox("Sell on trailing stop (Smart Exit)", value=True, key="sell_trail")
+            sell_use_profit_take = st.checkbox("Sell 50% on RSI climax (Smart Exit)", value=True, key="sell_pt")
+            sell_use_month_end = st.checkbox("Force close at month-end", value=True, key="sell_me")
+        with s2:
+            st.markdown("**Exit parameters**")
+            stop_loss_pct = st.number_input("Stop loss %", min_value=1, max_value=20, value=8, step=1, key="sl_pct") / 100.0
+            atr_trail_mult = st.number_input("Trailing stop (× ATR)", min_value=1.0, max_value=6.0, value=3.0, step=0.5, format="%.1f", key="atr_mult")
+            rsi_profit_taking = st.number_input("Profit take when RSI >", min_value=65, max_value=85, value=75, step=1, key="rsi_pt")
+
     if st.button("Run backtest", type="primary", key="backtest_btn"):
         symbol = (symbol or "").strip().upper()
         if not symbol:
@@ -157,12 +176,23 @@ with tab_backtest:
             with st.spinner(f"Fetching {symbol} and running backtest..."):
                 try:
                     # Apply user criteria to the backtest module before running
+                    _bt.CORE_REQUIRE_TREND = core_require_trend
+                    _bt.CORE_REQUIRE_PDI_MDI = core_require_pdi_mdi
                     _bt.ADX_MIN = int(adx_min)
                     _bt.ADX_MAX = int(adx_max)
                     _bt.RSI_ENTRY = int(rsi_entry)
                     _bt.MFI_ENTRY = int(mfi_entry)
                     _bt.RVOL_MIN = float(rvol_min)
                     _bt.SCORECARD_MIN = int(scorecard_min)
+                    _bt.SELL_USE_SMA20 = sell_use_sma20
+                    _bt.SELL_USE_PDI_MDI = sell_use_pdi_mdi
+                    _bt.SELL_USE_STOP_LOSS = sell_use_stop_loss
+                    _bt.SELL_USE_TRAILING = sell_use_trailing
+                    _bt.SELL_USE_PROFIT_TAKE = sell_use_profit_take
+                    _bt.SELL_USE_MONTH_END = sell_use_month_end
+                    _bt.STOP_LOSS_PCT = stop_loss_pct
+                    _bt.ATR_TRAIL_MULT = atr_trail_mult
+                    _bt.RSI_PROFIT_TAKING = rsi_profit_taking
 
                     df = fetch_data_yfinance(symbol, period=period)
                     df = add_indicators(df)
