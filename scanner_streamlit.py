@@ -107,15 +107,21 @@ with tab_backtest:
     st.subheader("Veteran backtest (single symbol)")
     st.caption("Uses same Core + Score 2/3 logic as the scanner. Data: yfinance (1y default).")
 
-    # Backtest uses backtest_options (fetch_data, add_indicators, run_veteran_backtest)
+    # Load backtest_options from the same directory as this script (works from any cwd / Streamlit Cloud)
+    import importlib.util
+    _bt_path = _here / "backtest_options.py"
+    if not _bt_path.exists():
+        st.error("Backtest requires **backtest_options.py** in the same folder as this app. File not found.")
+        st.stop()
     try:
-        from backtest_options import (
-            fetch_data_yfinance,
-            add_indicators,
-            run_veteran_backtest,
-        )
-    except ImportError as e:
-        st.error(f"Backtest requires backtest_options.py: {e}")
+        spec = importlib.util.spec_from_file_location("backtest_options", _bt_path)
+        _bt = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_bt)
+        fetch_data_yfinance = _bt.fetch_data_yfinance
+        add_indicators = _bt.add_indicators
+        run_veteran_backtest = _bt.run_veteran_backtest
+    except Exception as e:
+        st.error(f"Could not load backtest_options.py: {e}")
         st.stop()
 
     col1, col2, col3 = st.columns([2, 1, 1])
