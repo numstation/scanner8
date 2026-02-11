@@ -32,12 +32,12 @@ from daily_scanner import (
 )
 
 st.set_page_config(
-    page_title="Veteran v4.0 Scanner",
+    page_title="Numstation Stock Scanner",
     page_icon="📊",
     layout="wide",
 )
 
-st.title("📊 Veteran v4.0 Scanner & Backtest")
+st.title("📊 Numstation Stock Scanner & Backtest")
 st.caption("Core: Close>SMA20, 20<ADX<50, PDI>MDI  |  Score 2/3: RSI>50, MFI>55, RVOL≥1.0")
 
 tab_scan, tab_backtest = st.tabs(["Scanner", "Backtest"])
