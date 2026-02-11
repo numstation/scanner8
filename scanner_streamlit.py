@@ -10,6 +10,14 @@
 ==========================================================================
 """
 
+import sys
+from pathlib import Path
+
+# Ensure the app directory is on Python path (so backtest_options + daily_scanner are found)
+_here = Path(__file__).resolve().parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+
 import time
 import pandas as pd
 import streamlit as st
