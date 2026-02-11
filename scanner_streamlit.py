@@ -132,6 +132,23 @@ with tab_backtest:
     with col3:
         use_smart_exit = st.checkbox("Smart exit (trail + profit take)", value=True, key="bt_smart")
 
+    with st.expander("Adjust criteria (Core & Scorecard)", expanded=False):
+        st.caption("Override the default thresholds to test different factors. Core: ADX range. Scorecard: RSI, MFI, RVOL; trigger = min points out of 3.")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.markdown("**Core**")
+            adx_min = st.number_input("ADX min (trend floor)", min_value=10, max_value=40, value=20, step=1, key="adx_min")
+            adx_max = st.number_input("ADX max (not overheated)", min_value=30, max_value=70, value=50, step=1, key="adx_max")
+        with c2:
+            st.markdown("**Scorecard (1 pt each)**")
+            rsi_entry = st.number_input("RSI > (momentum)", min_value=30, max_value=70, value=50, step=1, key="rsi_entry")
+            mfi_entry = st.number_input("MFI > (money flow)", min_value=30, max_value=70, value=55, step=1, key="mfi_entry")
+            rvol_min = st.number_input("RVOL ≥ (volume)", min_value=0.5, max_value=2.0, value=1.0, step=0.1, format="%.1f", key="rvol_min")
+        with c3:
+            st.markdown("**Trigger**")
+            scorecard_min = st.slider("Score ≥ (out of 3)", min_value=1, max_value=3, value=2, key="scorecard_min")
+            st.caption("Need at least this many of RSI/MFI/RVOL to trigger BUY (with Core true).")
+
     if st.button("Run backtest", type="primary", key="backtest_btn"):
         symbol = (symbol or "").strip().upper()
         if not symbol:
@@ -139,6 +156,14 @@ with tab_backtest:
         else:
             with st.spinner(f"Fetching {symbol} and running backtest..."):
                 try:
+                    # Apply user criteria to the backtest module before running
+                    _bt.ADX_MIN = int(adx_min)
+                    _bt.ADX_MAX = int(adx_max)
+                    _bt.RSI_ENTRY = int(rsi_entry)
+                    _bt.MFI_ENTRY = int(mfi_entry)
+                    _bt.RVOL_MIN = float(rvol_min)
+                    _bt.SCORECARD_MIN = int(scorecard_min)
+
                     df = fetch_data_yfinance(symbol, period=period)
                     df = add_indicators(df)
                     required = ["SMA20", "RSI14", "ADX", "ADX_prev", "PDI", "MDI", "MFI14", "RVOL", "ATR14"]
