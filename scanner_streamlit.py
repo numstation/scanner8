@@ -91,7 +91,8 @@ with tab_scan:
             if results:
                 st.success(f"Found **{len(results)}** actionable signal(s).")
                 df = pd.DataFrame(results)
-                cols = ["Ticker", "Price", "Signal", "Why", "ADX", "RSI", "RVOL"]
+                df[" "] = df["Signal"].apply(lambda s: "🟢" if "BUY" in s else ("🔴" if "SELL" in s else "🟠"))
+                cols = [" ", "Ticker", "Price", "Signal", "Why", "ADX", "RSI", "RVOL"]
                 df = df[[c for c in cols if c in df.columns]]
                 st.dataframe(df, use_container_width=True, hide_index=True)
             else:

@@ -146,11 +146,21 @@ def analyze_stock(ticker: str) -> dict | None:
             details.append("VOL")
 
         signal = None
+        close_curr = curr["Close"]
+        open_curr = curr["Open"]
+        sma20_curr = curr["SMA20"]
+
         if core_pass and score >= 2:
             signal = f"BUY ({score}/3)"
-        elif curr["Close"] > curr["SMA20"] and curr["RSI"] > 75:
+        elif close_curr > sma20_curr and curr["RSI"] > 75 and close_curr < open_curr:
             signal = "PROFIT TAKE"
-            details = ["Overheated"]
+            details = ["RSI>75", "Bearish"]
+        elif close_curr < sma20_curr:
+            signal = "SELL (Trend Break)"
+            details = ["Close<SMA20"]
+        elif pdi < mdi:
+            signal = "SELL (Momentum Flip)"
+            details = ["PDI<MDI"]
 
         if signal:
             rvol_str = f"{curr['RVOL']:.2f}" if pd.notna(curr.get("RVOL")) else "—"
@@ -191,7 +201,8 @@ def _run_scan_with_tickers(tickers: list, label: str) -> None:
         print(f" {'Ticker':<10} {'Price':<10} {'Signal':<20} {'Why':<15} {'ADX':<6} {'RSI':<6} {'RVOL':<6}")
         print("-" * 85)
         for r in results:
-            icon = "🟢" if "BUY" in r["Signal"] else "🟠"
+            sig = r["Signal"]
+            icon = "🟢" if "BUY" in sig else ("🔴" if "SELL" in sig else "🟠")
             print(f"{icon} {r['Ticker']:<8} {r['Price']:<10} {r['Signal']:<20} {r['Why']:<15} {r['ADX']:<6} {r['RSI']:<6} {r['RVOL']:<6}")
     else:
         print(" No actionable signals today. Stay cash.")
