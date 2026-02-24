@@ -27,6 +27,9 @@ from daily_scanner import (
     analyze_stock,
     get_tickers,
     DEFAULT_TICKERS,
+    TECH_TICKERS,
+    HSI_TICKERS,
+    HKCEI_TICKERS,
     HK_TICKERS,
     US_TICKERS,
 )
@@ -47,14 +50,23 @@ with tab_scan:
     st.sidebar.header("Ticker source")
     source = st.sidebar.radio(
         "Choose list",
-        ["HK stocks", "US stocks", "Default list", "Custom (type below)"],
+        ["Tech", "HSI", "HKCEI", "HK (all)", "US stocks", "Default list", "Custom (type below)"],
         index=0,
     )
 
     tickers = []
-    if source == "HK stocks":
+    if source == "Tech":
+        tickers = TECH_TICKERS.copy()
+        st.sidebar.info(f"Using {len(tickers)} Tech tickers.")
+    elif source == "HSI":
+        tickers = HSI_TICKERS.copy()
+        st.sidebar.info(f"Using {len(tickers)} HSI tickers.")
+    elif source == "HKCEI":
+        tickers = HKCEI_TICKERS.copy()
+        st.sidebar.info(f"Using {len(tickers)} HKCEI tickers.")
+    elif source == "HK (all)":
         tickers = HK_TICKERS.copy()
-        st.sidebar.info(f"Using {len(tickers)} HK tickers.")
+        st.sidebar.info(f"Using {len(tickers)} HK tickers (Tech+HSI+HKCEI).")
     elif source == "US stocks":
         tickers = US_TICKERS.copy()
         st.sidebar.info(f"Using {len(tickers)} US tickers.")

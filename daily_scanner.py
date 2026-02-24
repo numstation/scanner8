@@ -30,30 +30,57 @@ except ImportError as e:
     sys.exit(1)
 
 # --- 1. TICKER LISTS ---
-# Default list when no args (used if you run with custom logic elsewhere)
-DEFAULT_TICKERS = [
-    "9988.HK", "0700.HK", "0883.HK", "0005.HK", "9992.HK", "9626.HK",
-    "9999.HK", "0027.HK", "1772.HK", "9888.HK", "1810.HK", "1211.HK",
+# Normalize: stocklist.txt uses 5-digit codes (e.g. 09988.HK); we use 4-digit (9988.HK)
+def _norm_code(raw: str) -> str:
+    """Strip leading 0 from XXXXX.HK -> XXXX.HK"""
+    s = raw.strip().upper()
+    if not s.endswith(".HK"):
+        return s
+    prefix = s[:-3]
+    if len(prefix) == 5 and prefix.startswith("0"):
+        return prefix[1:] + ".HK"
+    return s
+
+# Tech stocks (from stocklist.txt)
+TECH_TICKERS = [
+    _norm_code(c) for c in
+    ["00020.HK", "00241.HK", "00268.HK", "00285.HK", "00300.HK", "00700.HK", "00780.HK",
+     "00981.HK", "00992.HK", "01024.HK", "01211.HK", "01347.HK", "01698.HK", "01810.HK",
+     "02015.HK", "02382.HK", "03690.HK", "03888.HK", "06618.HK", "06690.HK", "09618.HK",
+     "09626.HK", "09660.HK", "09863.HK", "09866.HK", "09868.HK", "09888.HK", "09961.HK",
+     "09988.HK", "09999.HK"]
 ]
 
-HK_TICKERS = [
-    "0001.HK", "0002.HK", "0003.HK", "0005.HK", "0006.HK", "0012.HK", 
-    "0016.HK", "0027.HK", "0066.HK", "0101.HK", "0175.HK", "0241.HK",
-    "0267.HK", "0285.HK", "0288.HK", "0291.HK", "0300.HK", "0316.HK",
-    "0322.HK", "0386.HK", "0388.HK", "0669.HK", "0688.HK", "0700.HK",
-    "0728.HK", "0762.HK", "0823.HK", "0836.HK", "0857.HK", "0868.HK", 
-    "0881.HK", "0883.HK", "0939.HK", "0941.HK", "0960.HK", "0968.HK", 
-    "0981.HK", "0992.HK", "1024.HK", "1038.HK", "1044.HK", "1088.HK", 
-    "1093.HK", "1099.HK", "1109.HK", "1113.HK", "1177.HK", "1209.HK", 
-    "1211.HK", "1288.HK", "1299.HK", "1378.HK", "1398.HK", "1658.HK", 
-    "1801.HK", "1810.HK", "1876.HK", "1928.HK", "1929.HK", "1997.HK", 
-    "2015.HK", "2020.HK", "2057.HK", "2269.HK", "2313.HK", "2318.HK", 
-    "2319.HK", "2328.HK", "2331.HK", "2359.HK", "2382.HK", "2388.HK", 
-    "2618.HK", "2628.HK", "2688.HK", "2899.HK", "3328.HK", "3690.HK", 
-    "3692.HK", "3968.HK", "3988.HK", "6160.HK", "6618.HK", "6690.HK", 
-    "6862.HK", "9618.HK", "9633.HK", "9868.HK", "9888.HK", "9901.HK", 
-    "9961.HK", "9987.HK", "9988.HK", "9992.HK", "9999.HK",
+# HSI (Hang Seng Index) constituents
+HSI_TICKERS = [
+    _norm_code(c) for c in
+    ["00001.HK", "00002.HK", "00003.HK", "00005.HK", "00006.HK", "00012.HK", "00016.HK",
+     "00027.HK", "00066.HK", "00101.HK", "00241.HK", "00285.HK", "00288.HK", "00300.HK",
+     "00316.HK", "00322.HK", "00388.HK", "00669.HK", "00728.HK", "00823.HK", "00836.HK",
+     "00868.HK", "00881.HK", "00960.HK", "00968.HK", "01038.HK", "01044.HK", "01099.HK",
+     "01113.HK", "01177.HK", "01209.HK", "01299.HK", "01876.HK", "01928.HK", "01929.HK",
+     "01997.HK", "02269.HK", "02331.HK", "02359.HK", "02388.HK", "02618.HK", "02688.HK",
+     "03692.HK", "06862.HK", "09901.HK"]
 ]
+
+# HKCEI (Hang Seng China Enterprises Index)
+HKCEI_TICKERS = [
+    _norm_code(c) for c in
+    ["00175.HK", "00267.HK", "00291.HK", "00386.HK", "00688.HK", "00700.HK", "00762.HK",
+     "00857.HK", "00883.HK", "00939.HK", "00941.HK", "00981.HK", "00992.HK", "01024.HK",
+     "01088.HK", "01093.HK", "01109.HK", "01211.HK", "01288.HK", "01378.HK", "01398.HK",
+     "01658.HK", "01801.HK", "01810.HK", "02015.HK", "02020.HK", "02057.HK", "02313.HK",
+     "02318.HK", "02319.HK", "02328.HK", "02382.HK", "02628.HK", "02899.HK", "03328.HK",
+     "03690.HK", "03968.HK", "03988.HK", "06160.HK", "06618.HK", "06690.HK", "09618.HK",
+     "09633.HK", "09868.HK", "09888.HK", "09961.HK", "09987.HK", "09988.HK", "09992.HK",
+     "09999.HK"]
+]
+
+# Default: Tech list when no args
+DEFAULT_TICKERS = TECH_TICKERS.copy()
+
+# HK = all three lists combined, deduplicated (for CLI: python daily_scanner.py HK)
+HK_TICKERS = list(dict.fromkeys(TECH_TICKERS + HSI_TICKERS + HKCEI_TICKERS))
 
 US_TICKERS = [
     "NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "GOOGL", "META", "AMD",
@@ -65,9 +92,18 @@ US_TICKERS = [
 
 
 def get_tickers(market: str) -> list:
-    """Return ticker list for market (HK or US)."""
+    """Return ticker list for market: Tech, HSI, HKCEI, HK (all), or US."""
+    if market == "TECH":
+        print(f" Loaded {len(TECH_TICKERS)} Tech tickers.")
+        return TECH_TICKERS.copy()
+    if market == "HSI":
+        print(f" Loaded {len(HSI_TICKERS)} HSI tickers.")
+        return HSI_TICKERS.copy()
+    if market == "HKCEI":
+        print(f" Loaded {len(HKCEI_TICKERS)} HKCEI tickers.")
+        return HKCEI_TICKERS.copy()
     if market == "HK":
-        print(f" Loaded {len(HK_TICKERS)} HK tickers.")
+        print(f" Loaded {len(HK_TICKERS)} HK tickers (Tech+HSI+HKCEI).")
         return HK_TICKERS.copy()
     if market == "US":
         print(f" Loaded {len(US_TICKERS)} US tickers.")
@@ -231,13 +267,12 @@ def main() -> None:
     # sys.argv[0] = script name; [1:] = user args
     if len(sys.argv) > 1:
         args = [a.strip() for a in sys.argv[1:] if a.strip()]
-        # Single arg "HK" or "US" → use that market's list
-        if len(args) == 1 and args[0].upper() == "HK":
-            run_scan("HK")
-            return
-        if len(args) == 1 and args[0].upper() == "US":
-            run_scan("US")
-            return
+        # Single arg: use that list
+        if len(args) == 1:
+            a = args[0].upper()
+            if a in ("HK", "TECH", "HSI", "HKCEI", "US"):
+                run_scan(a)
+                return
         # Otherwise treat all args as custom tickers
         tickers = args
         print(f" Custom scan requested: {tickers}")
