@@ -26,12 +26,9 @@ import streamlit as st
 try:
     from daily_scanner import (
         analyze_stock,
-        get_tickers,
-        DEFAULT_TICKERS,
         TECH_TICKERS,
         HSI_TICKERS,
         HKCEI_TICKERS,
-        HK_TICKERS,
         US_TICKERS,
     )
 except ImportError as e:
@@ -55,7 +52,7 @@ with tab_scan:
     st.sidebar.header("Ticker source")
     source = st.sidebar.radio(
         "Choose list",
-        ["Tech", "HSI", "HKCEI", "HK (all)", "US stocks", "Default list", "Custom (type below)"],
+        ["Tech", "HSI", "HKCEI", "US stocks", "Custom (type below)"],
         index=0,
     )
 
@@ -69,15 +66,9 @@ with tab_scan:
     elif source == "HKCEI":
         tickers = HKCEI_TICKERS.copy()
         st.sidebar.info(f"Using {len(tickers)} HKCEI tickers.")
-    elif source == "HK (all)":
-        tickers = HK_TICKERS.copy()
-        st.sidebar.info(f"Using {len(tickers)} HK tickers (Tech+HSI+HKCEI).")
     elif source == "US stocks":
         tickers = US_TICKERS.copy()
         st.sidebar.info(f"Using {len(tickers)} US tickers.")
-    elif source == "Default list":
-        tickers = DEFAULT_TICKERS.copy()
-        st.sidebar.info(f"Using default list ({len(tickers)} tickers).")
     else:
         custom = st.sidebar.text_area(
             "Enter tickers (one per line or comma-separated)",
@@ -90,13 +81,44 @@ with tab_scan:
         if not tickers and source == "Custom (type below)":
             st.sidebar.warning("Enter at least one ticker.")
 
+    # Scanner criteria (same structure as Backtest tab)
+    with st.expander("Adjust scan criteria (Core & Scorecard)", expanded=False):
+        st.caption("Set BUY conditions before running the scan. Defaults match Veteran v4.0.")
+        sc1, sc2, sc3 = st.columns(3)
+        with sc1:
+            st.markdown("**Core (BUY)**")
+            scan_core_trend = st.checkbox("Require Close > SMA20", value=True, key="scan_core_trend")
+            scan_core_pdi_mdi = st.checkbox("Require PDI > MDI", value=True, key="scan_core_pdi_mdi")
+            scan_adx_min = st.number_input("ADX min", min_value=10, max_value=40, value=20, step=1, key="scan_adx_min")
+            scan_adx_max = st.number_input("ADX max", min_value=30, max_value=70, value=50, step=1, key="scan_adx_max")
+        with sc2:
+            st.markdown("**Scorecard (1 pt each)**")
+            scan_rsi_entry = st.number_input("RSI >", min_value=30, max_value=70, value=50, step=1, key="scan_rsi_entry")
+            scan_mfi_entry = st.number_input("MFI >", min_value=30, max_value=70, value=55, step=1, key="scan_mfi_entry")
+            scan_rvol_min = st.number_input("RVOL ≥", min_value=0.5, max_value=2.0, value=1.0, step=0.1, format="%.1f", key="scan_rvol_min")
+        with sc3:
+            st.markdown("**Trigger & Profit Take**")
+            scan_scorecard_min = st.slider("Score ≥ (out of 3)", min_value=1, max_value=3, value=2, key="scan_scorecard_min")
+            scan_rsi_profit_take = st.number_input("Profit take when RSI >", min_value=65, max_value=85, value=75, step=1, key="scan_rsi_pt")
+
     if tickers:
         if st.button("Run scan", type="primary", key="scan_btn"):
             progress = st.progress(0, text="Scanning...")
             results = []
             n = len(tickers)
+            scan_kwargs = {
+                "core_require_trend": scan_core_trend,
+                "core_require_pdi_mdi": scan_core_pdi_mdi,
+                "adx_min": int(scan_adx_min),
+                "adx_max": int(scan_adx_max),
+                "rsi_entry": int(scan_rsi_entry),
+                "mfi_entry": int(scan_mfi_entry),
+                "rvol_min": float(scan_rvol_min),
+                "scorecard_min": int(scan_scorecard_min),
+                "rsi_profit_take": int(scan_rsi_profit_take),
+            }
             for i, t in enumerate(tickers):
-                res = analyze_stock(t)
+                res = analyze_stock(t, **scan_kwargs)
                 if res:
                     results.append(res)
                 progress.progress((i + 1) / n, text=f"Scanning {t}...")

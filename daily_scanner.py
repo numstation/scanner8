@@ -134,10 +134,23 @@ def _fetch_ohlcv(ticker: str, period: str = "6mo") -> pd.DataFrame | None:
         return None
 
 
-def analyze_stock(ticker: str) -> dict | None:
+def analyze_stock(
+    ticker: str,
+    *,
+    core_require_trend: bool = True,
+    core_require_pdi_mdi: bool = True,
+    adx_min: int = 20,
+    adx_max: int = 50,
+    rsi_entry: int = 50,
+    mfi_entry: int = 55,
+    rvol_min: float = 1.0,
+    scorecard_min: int = 2,
+    rsi_profit_take: int = 75,
+) -> dict | None:
     """
     One stock: download 6mo, compute indicators with ta library, apply Veteran v4.0.
     Returns a result dict if there is an actionable signal, else None.
+    All criteria params are optional; defaults match Veteran v4.0.
     """
     try:
         df = _fetch_ohlcv(ticker)
@@ -164,23 +177,22 @@ def analyze_stock(ticker: str) -> dict | None:
         if pd.isna(adx) or pd.isna(pdi) or pd.isna(mdi):
             return None
 
-        # CORE (all required)
-        core_pass = (
-            curr["Close"] > curr["SMA20"]
-            and 20 < adx < 50
-            and pdi > mdi
-        )
+        # CORE (configurable)
+        trend_ok = (not core_require_trend) or (curr["Close"] > curr["SMA20"])
+        adx_ok = adx_min < adx < adx_max
+        pdi_ok = (not core_require_pdi_mdi) or (pdi > mdi)
+        core_pass = trend_ok and adx_ok and pdi_ok
 
-        # SCORECARD (2 of 3)
+        # SCORECARD (configurable)
         score = 0
         details = []
-        if curr["RSI"] > 50:
+        if curr["RSI"] > rsi_entry:
             score += 1
             details.append("RSI")
-        if pd.notna(curr.get("MFI")) and curr["MFI"] > 55:
+        if pd.notna(curr.get("MFI")) and curr["MFI"] > mfi_entry:
             score += 1
             details.append("MFI")
-        if pd.notna(curr.get("RVOL")) and curr["RVOL"] >= 1.0:
+        if pd.notna(curr.get("RVOL")) and curr["RVOL"] >= rvol_min:
             score += 1
             details.append("VOL")
 
@@ -189,11 +201,11 @@ def analyze_stock(ticker: str) -> dict | None:
         open_curr = curr["Open"]
         sma20_curr = curr["SMA20"]
 
-        if core_pass and score >= 2:
+        if core_pass and score >= scorecard_min:
             signal = f"BUY ({score}/3)"
-        elif close_curr > sma20_curr and curr["RSI"] > 75 and close_curr < open_curr:
+        elif close_curr > sma20_curr and curr["RSI"] > rsi_profit_take and close_curr < open_curr:
             signal = "PROFIT TAKE"
-            details = ["RSI>75", "Bearish"]
+            details = [f"RSI>{rsi_profit_take}", "Bearish"]
         elif close_curr < sma20_curr:
             signal = "SELL (Trend Break)"
             details = ["Close<SMA20"]
