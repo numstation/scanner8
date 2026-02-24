@@ -146,6 +146,9 @@ def analyze_stock(
     rvol_min: float = 1.0,
     scorecard_min: int = 2,
     rsi_profit_take: int = 75,
+    sell_use_sma20: bool = True,
+    sell_use_pdi_mdi: bool = True,
+    sell_use_profit_take: bool = True,
 ) -> dict | None:
     """
     One stock: download 6mo, compute indicators with ta library, apply Veteran v4.0.
@@ -203,13 +206,13 @@ def analyze_stock(
 
         if core_pass and score >= scorecard_min:
             signal = f"BUY ({score}/3)"
-        elif close_curr > sma20_curr and curr["RSI"] > rsi_profit_take and close_curr < open_curr:
+        elif sell_use_profit_take and close_curr > sma20_curr and curr["RSI"] > rsi_profit_take and close_curr < open_curr:
             signal = "PROFIT TAKE"
             details = [f"RSI>{rsi_profit_take}", "Bearish"]
-        elif close_curr < sma20_curr:
+        elif sell_use_sma20 and close_curr < sma20_curr:
             signal = "SELL (Trend Break)"
             details = ["Close<SMA20"]
-        elif pdi < mdi:
+        elif sell_use_pdi_mdi and pdi < mdi:
             signal = "SELL (Momentum Flip)"
             details = ["PDI<MDI"]
 

@@ -97,8 +97,25 @@ with tab_scan:
             scan_mfi_entry = st.number_input("MFI >", min_value=30, max_value=70, value=55, step=1, key="scan_mfi_entry")
             scan_rvol_min = st.number_input("RVOL ≥", min_value=0.5, max_value=2.0, value=1.0, step=0.1, format="%.1f", key="scan_rvol_min")
         with sc3:
-            st.markdown("**Trigger & Profit Take**")
+            st.markdown("**Trigger**")
             scan_scorecard_min = st.slider("Score ≥ (out of 3)", min_value=1, max_value=3, value=2, key="scan_scorecard_min")
+            st.caption("Need at least this many of RSI/MFI/RVOL to trigger BUY (with Core true).")
+
+    with st.expander("Adjust sell rules", expanded=False):
+        st.caption("Turn exit conditions on/off. Same layout as Backtest. Scanner uses: SMA20, PDI<MDI, Profit take.")
+        ss1, ss2 = st.columns(2)
+        with ss1:
+            st.markdown("**Exit toggles**")
+            scan_sell_sma20 = st.checkbox("Sell when Close < SMA20", value=True, key="scan_sell_sma20")
+            scan_sell_pdi_mdi = st.checkbox("Sell when PDI < MDI", value=True, key="scan_sell_pdi_mdi")
+            scan_sell_stop_loss = st.checkbox("Sell at stop loss %", value=True, key="scan_sell_stop")
+            scan_sell_trailing = st.checkbox("Sell on trailing stop (Smart Exit)", value=True, key="scan_sell_trail")
+            scan_sell_profit_take = st.checkbox("Sell 50% on RSI climax (Smart Exit)", value=True, key="scan_sell_pt")
+            scan_sell_month_end = st.checkbox("Force close at month-end", value=True, key="scan_sell_me")
+        with ss2:
+            st.markdown("**Exit parameters**")
+            scan_stop_loss_pct = st.number_input("Stop loss %", min_value=1, max_value=20, value=8, step=1, key="scan_sl_pct") / 100.0
+            scan_atr_trail_mult = st.number_input("Trailing stop (× ATR)", min_value=1.0, max_value=6.0, value=3.0, step=0.5, format="%.1f", key="scan_atr_mult")
             scan_rsi_profit_take = st.number_input("Profit take when RSI >", min_value=65, max_value=85, value=75, step=1, key="scan_rsi_pt")
 
     if tickers:
@@ -116,6 +133,9 @@ with tab_scan:
                 "rvol_min": float(scan_rvol_min),
                 "scorecard_min": int(scan_scorecard_min),
                 "rsi_profit_take": int(scan_rsi_profit_take),
+                "sell_use_sma20": scan_sell_sma20,
+                "sell_use_pdi_mdi": scan_sell_pdi_mdi,
+                "sell_use_profit_take": scan_sell_profit_take,
             }
             for i, t in enumerate(tickers):
                 res = analyze_stock(t, **scan_kwargs)
