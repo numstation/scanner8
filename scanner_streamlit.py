@@ -23,16 +23,21 @@ import pandas as pd
 import streamlit as st
 
 # Reuse scanner logic from the existing CLI script
-from daily_scanner import (
-    analyze_stock,
-    get_tickers,
-    DEFAULT_TICKERS,
-    TECH_TICKERS,
-    HSI_TICKERS,
-    HKCEI_TICKERS,
-    HK_TICKERS,
-    US_TICKERS,
-)
+try:
+    from daily_scanner import (
+        analyze_stock,
+        get_tickers,
+        DEFAULT_TICKERS,
+        TECH_TICKERS,
+        HSI_TICKERS,
+        HKCEI_TICKERS,
+        HK_TICKERS,
+        US_TICKERS,
+    )
+except ImportError as e:
+    st.error(f"Failed to load daily_scanner: {e}")
+    st.info("Ensure daily_scanner.py is in the same folder and has no syntax errors. Dependencies: yfinance, pandas, ta.")
+    st.stop()
 
 st.set_page_config(
     page_title="Numstation Stock Scanner",

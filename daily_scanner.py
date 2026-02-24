@@ -22,12 +22,15 @@ try:
     from ta.momentum import RSIIndicator
     from ta.trend import ADXIndicator, SMAIndicator
     from ta.volume import MFIIndicator
-    import schedule
 except ImportError as e:
     print(f"[ERROR] Missing module: {e}")
-    print("Install with: pip install yfinance pandas ta schedule")
-    print("Or use a venv: python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt")
+    print("Install with: pip install yfinance pandas ta")
     sys.exit(1)
+
+try:
+    import schedule
+except ImportError:
+    schedule = None  # Optional: only needed for scheduler mode
 
 # --- 1. TICKER LISTS ---
 # Normalize: stocklist.txt uses 5-digit codes (e.g. 09988.HK); we use 4-digit (9988.HK)
