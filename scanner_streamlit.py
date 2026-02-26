@@ -18,6 +18,7 @@ _here = Path(__file__).resolve().parent
 if str(_here) not in sys.path:
     sys.path.insert(0, str(_here))
 
+import inspect
 import time
 import pandas as pd
 import streamlit as st
@@ -143,8 +144,16 @@ with tab_scan:
                 "sell_use_adx_exhaustion": scan_sell_adx_exhaustion,
                 "sell_use_profit_take": scan_sell_profit_take,
             }
+            # Only pass kwargs that analyze_stock accepts (handles older deployed versions)
+            sig = inspect.signature(analyze_stock)
+            valid_params = {p for p in sig.parameters if p != "ticker"}
+            filtered = {k: v for k, v in scan_kwargs.items() if k in valid_params}
             for i, t in enumerate(tickers):
-                res = analyze_stock(t, **scan_kwargs)
+                try:
+                    res = analyze_stock(t, **filtered)
+                except TypeError as e:
+                    st.error(f"Scan error for {t}: {e}")
+                    res = None
                 if res:
                     results.append(res)
                 progress.progress((i + 1) / n, text=f"Scanning {t}...")

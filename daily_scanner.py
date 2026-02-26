@@ -179,44 +179,44 @@ def analyze_stock(
         df["ADX_prev2"] = df["ADX"].shift(2)
 
         curr = df.iloc[-1]
-        adx = curr["ADX"]
-        pdi = curr["PDI"]
-        mdi = curr["MDI"]
-        if pd.isna(adx) or pd.isna(pdi) or pd.isna(mdi):
+        adx = float(curr["ADX"]) if pd.notna(curr["ADX"]) else None
+        pdi = float(curr["PDI"]) if pd.notna(curr["PDI"]) else None
+        mdi = float(curr["MDI"]) if pd.notna(curr["MDI"]) else None
+        if adx is None or pdi is None or mdi is None:
             return None
 
         # CORE (configurable)
-        trend_ok = (not core_require_trend) or (curr["Close"] > curr["SMA20"])
+        trend_ok = (not core_require_trend) or (float(curr["Close"]) > float(curr["SMA20"]))
         adx_ok = adx_min < adx < adx_max
-        pdi_ok = (not core_require_pdi_mdi) or (pdi > mdi + pdi_buffer)
+        pdi_ok = (not core_require_pdi_mdi) or (pdi > mdi + float(pdi_buffer))
         adx_prev = curr.get("ADX_prev")
         adx_prev2 = curr.get("ADX_prev2")
-        slope_curr = (adx - adx_prev) if pd.notna(adx_prev) else 0.0
-        slope_prev = (adx_prev - adx_prev2) if pd.notna(adx_prev) and pd.notna(adx_prev2) else 0.0
+        slope_curr = float(adx - adx_prev) if pd.notna(adx_prev) else 0.0
+        slope_prev = float(adx_prev - adx_prev2) if pd.notna(adx_prev) and pd.notna(adx_prev2) else 0.0
         adx_awakening = (slope_prev <= 0 and slope_curr > 0) if core_require_adx_awakening else True
         core_pass = trend_ok and adx_ok and pdi_ok and adx_awakening
 
         # SCORECARD (configurable)
         score = 0
         details = []
-        if curr["RSI"] > rsi_entry:
+        if float(curr["RSI"]) > rsi_entry:
             score += 1
             details.append("RSI")
-        if pd.notna(curr.get("MFI")) and curr["MFI"] > mfi_entry:
+        if pd.notna(curr.get("MFI")) and float(curr["MFI"]) > mfi_entry:
             score += 1
             details.append("MFI")
-        if pd.notna(curr.get("RVOL")) and curr["RVOL"] >= rvol_min:
+        if pd.notna(curr.get("RVOL")) and float(curr["RVOL"]) >= rvol_min:
             score += 1
             details.append("VOL")
 
         signal = None
-        close_curr = curr["Close"]
-        open_curr = curr["Open"]
-        sma20_curr = curr["SMA20"]
+        close_curr = float(curr["Close"])
+        open_curr = float(curr["Open"])
+        sma20_curr = float(curr["SMA20"])
 
         if core_pass and score >= scorecard_min:
             signal = f"BUY ({score}/3)"
-        elif sell_use_profit_take and close_curr > sma20_curr and curr["RSI"] > rsi_profit_take and close_curr < open_curr:
+        elif sell_use_profit_take and close_curr > sma20_curr and float(curr["RSI"]) > rsi_profit_take and close_curr < open_curr:
             signal = "PROFIT TAKE"
             details = [f"RSI>{rsi_profit_take}", "Bearish"]
         elif sell_use_adx_exhaustion and slope_prev >= 0 and slope_curr < 0:
