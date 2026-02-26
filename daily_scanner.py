@@ -139,8 +139,10 @@ def analyze_stock(
     *,
     core_require_trend: bool = True,
     core_require_pdi_mdi: bool = True,
+    pdi_buffer: float = 0.0,
     adx_min: int = 20,
     adx_max: int = 50,
+    core_require_adx_awakening: bool = False,
     rsi_entry: int = 50,
     mfi_entry: int = 55,
     rvol_min: float = 1.0,
@@ -148,6 +150,7 @@ def analyze_stock(
     rsi_profit_take: int = 75,
     sell_use_sma20: bool = True,
     sell_use_pdi_mdi: bool = True,
+    sell_use_adx_exhaustion: bool = False,
     sell_use_profit_take: bool = True,
 ) -> dict | None:
     """
@@ -172,6 +175,8 @@ def analyze_stock(
         df["MDI"] = adx_ind.adx_neg()   # -DI
         vol_sma = v.rolling(window=20, min_periods=1).mean().replace(0, float("nan"))
         df["RVOL"] = v / vol_sma
+        df["ADX_prev"] = df["ADX"].shift(1)
+        df["ADX_prev2"] = df["ADX"].shift(2)
 
         curr = df.iloc[-1]
         adx = curr["ADX"]
@@ -183,8 +188,13 @@ def analyze_stock(
         # CORE (configurable)
         trend_ok = (not core_require_trend) or (curr["Close"] > curr["SMA20"])
         adx_ok = adx_min < adx < adx_max
-        pdi_ok = (not core_require_pdi_mdi) or (pdi > mdi)
-        core_pass = trend_ok and adx_ok and pdi_ok
+        pdi_ok = (not core_require_pdi_mdi) or (pdi > mdi + pdi_buffer)
+        adx_prev = curr.get("ADX_prev")
+        adx_prev2 = curr.get("ADX_prev2")
+        slope_curr = (adx - adx_prev) if pd.notna(adx_prev) else 0.0
+        slope_prev = (adx_prev - adx_prev2) if pd.notna(adx_prev) and pd.notna(adx_prev2) else 0.0
+        adx_awakening = (slope_prev <= 0 and slope_curr > 0) if core_require_adx_awakening else True
+        core_pass = trend_ok and adx_ok and pdi_ok and adx_awakening
 
         # SCORECARD (configurable)
         score = 0
@@ -209,6 +219,9 @@ def analyze_stock(
         elif sell_use_profit_take and close_curr > sma20_curr and curr["RSI"] > rsi_profit_take and close_curr < open_curr:
             signal = "PROFIT TAKE"
             details = [f"RSI>{rsi_profit_take}", "Bearish"]
+        elif sell_use_adx_exhaustion and slope_prev >= 0 and slope_curr < 0:
+            signal = "SELL (強弩之末)"
+            details = ["ADX Exhaustion"]
         elif sell_use_sma20 and close_curr < sma20_curr:
             signal = "SELL (Trend Break)"
             details = ["Close<SMA20"]

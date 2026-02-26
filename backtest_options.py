@@ -76,7 +76,9 @@ COMMISSION_PCT   = 0.002   # 0.2% per trade (buy + sell)
 
 # ---- Optional toggles (override from Streamlit or tests) ----
 CORE_REQUIRE_TREND   = True   # Core: require Close > SMA20
-CORE_REQUIRE_PDI_MDI = True   # Core: require PDI > MDI
+CORE_REQUIRE_PDI_MDI = True   # Core: require PDI > MDI (uses PDI_BUFFER)
+CORE_REQUIRE_ADX_AWAKENING = False  # 龍抬頭: ADX slope down→up (best entry)
+SELL_USE_ADX_EXHAUSTION    = False  # 強弩之末: ADX slope up→down (strong sell)
 SELL_USE_SMA20       = True   # Sell when Close < SMA20
 SELL_USE_PDI_MDI     = True   # Sell when PDI < MDI
 SELL_USE_STOP_LOSS   = True   # Sell at -STOP_LOSS_PCT
@@ -254,8 +256,9 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
         df["PDI"] = adx_df["DMP_14"]
         df["MDI"] = adx_df["DMN_14"]
 
-    # ADX slope: Current_ADX > Previous_ADX (trend acceleration)
+    # ADX slope: for 龍抬頭 (down→up) and 強弩之末 (up→down)
     df["ADX_prev"] = df["ADX"].shift(1)
+    df["ADX_prev2"] = df["ADX"].shift(2)
 
     # ---- Volume: OBV and OBV_SMA20 (volume trend confirmation) ----
     df["OBV"] = ta.obv(c, v) if _HAS_PANDAS_TA else _obv(c, v)
@@ -303,7 +306,7 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
 
     SELL (use_smart_exit=False): Close<SMA20 | PDI<MDI | Stop | Month-end → 100%.
     """
-    required = ["SMA20", "RSI14", "ADX", "ADX_prev", "PDI", "MDI", "MFI14", "RVOL"]
+    required = ["SMA20", "RSI14", "ADX", "ADX_prev", "ADX_prev2", "PDI", "MDI", "MFI14", "RVOL"]
     if use_smart_exit:
         required = required + ["ATR14", "Open"]
     trades: List[Dict] = []
@@ -359,6 +362,7 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
         rsi    = row["RSI14"]
         adx    = float(row["ADX"])
         adx_p  = float(row["ADX_prev"])
+        adx_p2 = float(row["ADX_prev2"]) if not pd.isna(row.get("ADX_prev2")) else adx_p
         pdi    = float(row["PDI"])
         mdi    = float(row["MDI"])
         mfi    = float(row["MFI14"]) if not pd.isna(row.get("MFI14")) else np.nan
@@ -369,6 +373,9 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
         atr = float(row["ATR14"]) if use_smart_exit and not pd.isna(row.get("ATR14")) else 0.0
 
         is_month_end = (date in month_ends)
+        # ADX slope for 龍抬頭 / 強弩之末
+        slope_curr = adx - adx_p
+        slope_prev = adx_p - adx_p2
 
         # =============================================================
         # STATE: IN POSITION → check sell conditions
@@ -395,7 +402,11 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
                 elif SELL_USE_PROFIT_TAKE and position_ratio >= 1.0 and rsi > RSI_PROFIT_TAKING and close < open_:
                     exit_reason = "Profit Taking 50% (RSI>75, Bearish Candle)"
                     sell_ratio = 0.5
-                # 4. Momentum / Stop / Month-end
+                # 4. 強弩之末 (Trend Exhaustion): ADX was rising, now falling
+                elif SELL_USE_ADX_EXHAUSTION and slope_prev >= 0 and slope_curr < 0:
+                    exit_reason = "Trend Exhaustion (ADX 強弩之末)"
+                    sell_ratio = 1.0
+                # 5. Momentum / Stop / Month-end
                 elif SELL_USE_PDI_MDI and pdi < mdi:
                     exit_reason = "Momentum Flip (PDI < MDI)"
                     sell_ratio = 1.0
@@ -407,7 +418,10 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
                     sell_ratio = 1.0
             else:
                 # Original exit logic (SMA20-only style)
-                if SELL_USE_SMA20 and close < sma20:
+                if SELL_USE_ADX_EXHAUSTION and slope_prev >= 0 and slope_curr < 0:
+                    exit_reason = "Trend Exhaustion (ADX 強弩之末)"
+                    sell_ratio = 1.0
+                elif SELL_USE_SMA20 and close < sma20:
                     exit_reason = "Trend Break (Close < SMA20)"
                     sell_ratio = 1.0
                 elif SELL_USE_PDI_MDI and pdi < mdi:
@@ -434,10 +448,12 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
         else:
             # ---- CORE (all must be true where enabled): trend floor + not overheated ----
             core_trend = (close > sma20) if CORE_REQUIRE_TREND else True
-            core_pdi_mdi = (pdi > mdi) if CORE_REQUIRE_PDI_MDI else True
+            core_pdi_mdi = (pdi > mdi + PDI_BUFFER) if CORE_REQUIRE_PDI_MDI else True
             core_adx_floor = adx > ADX_MIN   # mandatory: trend must exist
             core_adx_cap   = adx < ADX_MAX  # mandatory: not overheated
-            core = core_trend and core_pdi_mdi and core_adx_floor and core_adx_cap
+            # 龍抬頭 (Trend Awakening): ADX was falling, now rising
+            adx_awakening = (slope_prev <= 0 and slope_curr > 0) if CORE_REQUIRE_ADX_AWAKENING else True
+            core = core_trend and core_pdi_mdi and core_adx_floor and core_adx_cap and adx_awakening
 
             # ---- SCORECARD (1 pt each; need >= 2 of 3) ----
             score = 0
@@ -644,7 +660,7 @@ def run_backtesting_py(df: pd.DataFrame, symbol: str = "9988.HK") -> None:
                 ):
                     self.position.close()
 
-    valid = df.dropna(subset=["SMA20", "RSI14", "ADX", "ADX_prev", "PDI", "MDI", "MFI14", "RVOL", "ATR14"])
+    valid = df.dropna(subset=["SMA20", "RSI14", "ADX", "ADX_prev", "ADX_prev2", "PDI", "MDI", "MFI14", "RVOL", "ATR14"])
     if len(valid) < 20:
         return
 
@@ -678,7 +694,7 @@ def run_one_symbol(ticker: str, verbose: bool = True) -> Optional[Dict]:
         return None
 
     df = add_indicators(df)
-    valid = df.dropna(subset=["SMA20", "RSI14", "ADX", "ADX_prev", "PDI", "MDI", "MFI14", "RVOL", "ATR14"])
+    valid = df.dropna(subset=["SMA20", "RSI14", "ADX", "ADX_prev", "ADX_prev2", "PDI", "MDI", "MFI14", "RVOL", "ATR14"])
     if len(valid) < 10:
         print(f"[{ticker}] Not enough valid rows after warm-up")
         return None
@@ -822,7 +838,7 @@ def run_compare(symbols: Optional[List[str]] = None) -> None:
             rows.append({"symbol": ticker, "pnl_legacy": None, "pnl_smart": None, "n_legacy": 0, "n_smart": 0})
             continue
         df = add_indicators(df)
-        valid = df.dropna(subset=["SMA20", "RSI14", "ADX", "ADX_prev", "PDI", "MDI", "MFI14", "RVOL", "ATR14"])
+        valid = df.dropna(subset=["SMA20", "RSI14", "ADX", "ADX_prev", "ADX_prev2", "PDI", "MDI", "MFI14", "RVOL", "ATR14"])
         if len(valid) < 10:
             print(f"  Not enough valid data")
             rows.append({"symbol": ticker, "pnl_legacy": None, "pnl_smart": None, "n_legacy": 0, "n_smart": 0})
@@ -884,7 +900,7 @@ def main(symbol: Optional[str] = None):
     print("Computing indicators...")
     df = add_indicators(df)
 
-    valid = df.dropna(subset=["SMA20", "RSI14", "ADX", "ADX_prev", "PDI", "MDI", "MFI14", "RVOL", "ATR14"])
+    valid = df.dropna(subset=["SMA20", "RSI14", "ADX", "ADX_prev", "ADX_prev2", "PDI", "MDI", "MFI14", "RVOL", "ATR14"])
     print(f"Valid rows: {len(valid)} / {len(df)}  (after indicator warm-up)\n")
 
     if len(valid) < 10:
