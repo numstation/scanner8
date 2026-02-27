@@ -304,7 +304,7 @@ with tab_backtest:
                             c3.metric("Avg Win %", f"{avg_win:+.2f}%", None)
                             c4.metric("Avg Loss %", f"{avg_loss:+.2f}%", None)
 
-                            log_cols = ["Entry_Date", "Entry_Price", "E_ADX", "Exit_Date", "Exit_Price", "Hold_Days", "PnL", "PnL%", "Result", "Exit_Reason"]
+                            log_cols = ["Entry_Date", "Entry_Price", "Entry_Reason", "E_ADX", "E_ADX_Slope", "E_PDI", "E_MDI", "E_RSI", "E_MFI", "E_RVOL", "Exit_Date", "Exit_Price", "Exit_Reason", "Hold_Days", "PnL", "PnL%", "Result"]
                             log_cols = [c for c in log_cols if c in tdf.columns]
                             st.dataframe(tdf[log_cols], use_container_width=True, hide_index=True)
                 except Exception as e:

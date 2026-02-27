@@ -324,6 +324,8 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
     entry_pdi = 0.0
     entry_mdi = 0.0
     entry_mfi = 0.0
+    entry_reason = ""
+    entry_slope = 0.0
 
     def _append_trade(exit_reason: str, exit_price: float, pnl_ratio: float):
         nonlocal in_position, position_ratio
@@ -331,21 +333,23 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
         pnl_pct = (pnl / entry_price) * 100
         hold_days = (date - entry_date).days
         trades.append({
-            "Entry_Date":  entry_date.strftime("%Y-%m-%d"),
-            "Entry_Price": round(entry_price, 2),
-            "Exit_Date":   date.strftime("%Y-%m-%d"),
-            "Exit_Price":  round(exit_price, 2),
-            "Hold_Days":   hold_days,
-            "PnL":         round(pnl, 2),
-            "PnL%":        round(pnl_pct, 2),
-            "Exit_Reason": exit_reason,
-            "Result":      "WIN" if pnl > 0 else "LOSS",
-            "E_ADX":       round(entry_adx, 1),
-            "E_RSI":       round(entry_rsi, 1),
-            "E_PDI":       round(entry_pdi, 1),
-            "E_MDI":       round(entry_mdi, 1),
-            "E_RVOL":      round(entry_rvol, 2) if pd.notna(entry_rvol) else None,
-            "E_MFI":       round(entry_mfi, 1) if pd.notna(entry_mfi) else None,
+            "Entry_Date":   entry_date.strftime("%Y-%m-%d"),
+            "Entry_Price":  round(entry_price, 2),
+            "Entry_Reason": entry_reason,
+            "Exit_Date":    date.strftime("%Y-%m-%d"),
+            "Exit_Price":   round(exit_price, 2),
+            "Exit_Reason":  exit_reason,
+            "Hold_Days":    hold_days,
+            "PnL":          round(pnl, 2),
+            "PnL%":         round(pnl_pct, 2),
+            "Result":       "WIN" if pnl > 0 else "LOSS",
+            "E_ADX":        round(entry_adx, 1),
+            "E_ADX_Slope":  round(entry_slope, 2),
+            "E_RSI":        round(entry_rsi, 1),
+            "E_PDI":        round(entry_pdi, 1),
+            "E_MDI":        round(entry_mdi, 1),
+            "E_RVOL":       round(entry_rvol, 2) if pd.notna(entry_rvol) else None,
+            "E_MFI":        round(entry_mfi, 1) if pd.notna(entry_mfi) else None,
         })
 
     for i in range(len(df)):
@@ -457,12 +461,16 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
 
             # ---- SCORECARD (1 pt each; need >= 2 of 3) ----
             score = 0
+            score_parts = []
             if rsi > RSI_ENTRY:
                 score += 1
+                score_parts.append("RSI")
             if not pd.isna(mfi) and mfi > MFI_ENTRY:
                 score += 1
+                score_parts.append("MFI")
             if rvol >= RVOL_MIN:
                 score += 1
+                score_parts.append("RVOL")
 
             buy_signal = core and (score >= SCORECARD_MIN)
             if buy_signal:
@@ -477,6 +485,17 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
                 entry_mdi  = mdi
                 entry_rvol = rvol
                 entry_mfi  = mfi
+                entry_slope = slope_curr
+                # Build entry reason: Core + Score
+                core_parts = []
+                if CORE_REQUIRE_TREND:
+                    core_parts.append("Close>SMA20")
+                if CORE_REQUIRE_PDI_MDI:
+                    core_parts.append(f"PDI>MDI+{PDI_BUFFER}" if PDI_BUFFER != 0 else "PDI>MDI")
+                core_parts.append(f"ADX{ADX_MIN}-{ADX_MAX}")
+                if CORE_REQUIRE_ADX_AWAKENING:
+                    core_parts.append("龍抬頭")
+                entry_reason = "Core: " + ",".join(core_parts) + f" | Score {score}/3: " + ",".join(score_parts)
                 if verbose:
                     print(f"  >>> BUY  {date.strftime('%Y-%m-%d')}  "
                           f"Close={close:.2f}  ADX={adx:.1f}  RSI={rsi:.1f}  MFI={mfi:.1f}  RVOL={rvol:.2f}  "
@@ -490,21 +509,23 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
         pnl = (exit_price - entry_price) * position_ratio
         pnl_pct = (pnl / entry_price) * 100
         trades.append({
-            "Entry_Date":  entry_date.strftime("%Y-%m-%d"),
-            "Entry_Price": round(entry_price, 2),
-            "Exit_Date":   date.strftime("%Y-%m-%d"),
-            "Exit_Price":  round(exit_price, 2),
-            "Hold_Days":   (date - entry_date).days,
-            "PnL":         round(pnl, 2),
-            "PnL%":        round(pnl_pct, 2),
-            "Exit_Reason": "End of Data",
-            "Result":      "WIN" if pnl > 0 else "LOSS",
-            "E_ADX":       round(entry_adx, 1),
-            "E_RSI":       round(entry_rsi, 1),
-            "E_PDI":       round(entry_pdi, 1),
-            "E_MDI":       round(entry_mdi, 1),
-            "E_RVOL":      round(entry_rvol, 2) if pd.notna(entry_rvol) else None,
-            "E_MFI":       round(entry_mfi, 1) if pd.notna(entry_mfi) else None,
+            "Entry_Date":   entry_date.strftime("%Y-%m-%d"),
+            "Entry_Price":  round(entry_price, 2),
+            "Entry_Reason": entry_reason,
+            "Exit_Date":    date.strftime("%Y-%m-%d"),
+            "Exit_Price":   round(exit_price, 2),
+            "Exit_Reason":  "End of Data",
+            "Hold_Days":    (date - entry_date).days,
+            "PnL":          round(pnl, 2),
+            "PnL%":         round(pnl_pct, 2),
+            "Result":       "WIN" if pnl > 0 else "LOSS",
+            "E_ADX":        round(entry_adx, 1),
+            "E_ADX_Slope":  round(entry_slope, 2),
+            "E_RSI":        round(entry_rsi, 1),
+            "E_PDI":        round(entry_pdi, 1),
+            "E_MDI":        round(entry_mdi, 1),
+            "E_RVOL":       round(entry_rvol, 2) if pd.notna(entry_rvol) else None,
+            "E_MFI":        round(entry_mfi, 1) if pd.notna(entry_mfi) else None,
         })
 
     return trades
@@ -565,9 +586,10 @@ def print_report(symbol: str, trades: List[Dict], df: pd.DataFrame) -> None:
     pd.set_option("display.max_rows", None)
     pd.set_option("display.width", 140)
     log_cols = [
-        "Entry_Date", "Entry_Price", "E_ADX", "E_PDI", "E_MDI",
-        "Exit_Date", "Exit_Price",
-        "Hold_Days", "PnL", "PnL%", "Result", "Exit_Reason",
+        "Entry_Date", "Entry_Price", "Entry_Reason",
+        "E_ADX", "E_ADX_Slope", "E_PDI", "E_MDI", "E_RSI", "E_MFI", "E_RVOL",
+        "Exit_Date", "Exit_Price", "Exit_Reason",
+        "Hold_Days", "PnL", "PnL%", "Result",
     ]
     # Only include columns that exist
     log_cols = [c for c in log_cols if c in tdf.columns]
@@ -590,8 +612,8 @@ def print_report(symbol: str, trades: List[Dict], df: pd.DataFrame) -> None:
     if len(losses) > 0:
         print("\n--- Losing Trades Analysis (Indicators at Entry) ---\n")
         fail_cols = [
-            "Entry_Date", "Entry_Price", "Exit_Reason",
-            "PnL%", "E_ADX", "E_RSI", "E_PDI", "E_MDI", "E_RVOL",
+            "Entry_Date", "Entry_Price", "Entry_Reason", "Exit_Reason",
+            "PnL%", "E_ADX", "E_ADX_Slope", "E_RSI", "E_PDI", "E_MDI", "E_MFI", "E_RVOL",
         ]
         fail_cols = [c for c in fail_cols if c in losses.columns]
         print(losses[fail_cols].to_string(index=False))
