@@ -299,17 +299,25 @@ with tab_backtest:
                             losses = tdf[tdf["Result"] == "LOSS"]
                             n = len(tdf)
                             total_pnl = tdf["PnL"].sum()
+                            total_cost = tdf["Cost"].sum() if "Cost" in tdf.columns else 0
+                            total_proceeds = tdf["Proceeds"].sum() if "Proceeds" in tdf.columns else 0
+                            overall_pnl_pct = (total_pnl / total_cost * 100) if total_cost > 0 else 0
                             win_rate = len(wins) / n * 100
                             avg_win = wins["PnL%"].mean() if len(wins) > 0 else 0
                             avg_loss = losses["PnL%"].mean() if len(losses) > 0 else 0
 
-                            st.success(f"**{symbol}** — {n} trades | Win rate {win_rate:.1f}% | Total P&L **HK$ {total_pnl:+.2f}**")
-                            st.metric("Total P&L (HK$)", f"{total_pnl:+.2f}", None)
-                            c1, c2, c3, c4 = st.columns(4)
-                            c1.metric("Trades", n, None)
-                            c2.metric("Wins / Losses", f"{len(wins)} / {len(losses)}", None)
-                            c3.metric("Avg Win %", f"{avg_win:+.2f}%", None)
-                            c4.metric("Avg Loss %", f"{avg_loss:+.2f}%", None)
+                            st.success(f"**{symbol}** — {n} trades | Win rate {win_rate:.1f}% | Total P&L **HK$ {total_pnl:+.2f}** | Overall Return **{overall_pnl_pct:+.1f}%**")
+                            c1, c2, c3, c4, c5 = st.columns(5)
+                            c1.metric("Total P&L (HK$)", f"{total_pnl:+.2f}", None)
+                            c2.metric("Overall Return %", f"{overall_pnl_pct:+.1f}%", None)
+                            c3.metric("Total Cost", f"HK$ {total_cost:,.0f}", None)
+                            c4.metric("Total Proceeds", f"HK$ {total_proceeds:,.0f}", None)
+                            c5.metric("Wins / Losses", f"{len(wins)} / {len(losses)}", None)
+                            st.caption("Overall Return % = (Total Proceeds − Total Cost) / Total Cost × 100")
+                            d1, d2, d3 = st.columns(3)
+                            d1.metric("Trades", n, None)
+                            d2.metric("Avg Win %", f"{avg_win:+.2f}%", None)
+                            d3.metric("Avg Loss %", f"{avg_loss:+.2f}%", None)
 
                             log_cols = ["Entry_Date", "Entry_Price", "Entry_Reason", "E_ADX", "E_ADX_Slope", "E_PDI", "E_MDI", "E_RSI", "E_MFI", "E_RVOL", "E_Spread", "Exit_Date", "Exit_Price", "Exit_Reason", "Hold_Days", "PnL", "PnL%", "Result"]
                             log_cols = [c for c in log_cols if c in tdf.columns]

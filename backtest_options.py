@@ -337,10 +337,14 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
         pnl = (exit_price - entry_price) * pnl_ratio
         pnl_pct = (pnl / entry_price) * 100
         hold_days = (date - entry_date).days
+        cost = entry_price * pnl_ratio
+        proceeds = exit_price * pnl_ratio
         trades.append({
             "Entry_Date":   entry_date.strftime("%Y-%m-%d"),
             "Entry_Price":  round(entry_price, 2),
             "Entry_Reason": entry_reason,
+            "Cost":         round(cost, 2),
+            "Proceeds":     round(proceeds, 2),
             "Exit_Date":    date.strftime("%Y-%m-%d"),
             "Exit_Price":   round(exit_price, 2),
             "Exit_Reason":  exit_reason,
@@ -521,10 +525,14 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
         exit_price = last["Close"]
         pnl = (exit_price - entry_price) * position_ratio
         pnl_pct = (pnl / entry_price) * 100
+        cost = entry_price * position_ratio
+        proceeds = exit_price * position_ratio
         trades.append({
             "Entry_Date":   entry_date.strftime("%Y-%m-%d"),
             "Entry_Price":  round(entry_price, 2),
             "Entry_Reason": entry_reason,
+            "Cost":         round(cost, 2),
+            "Proceeds":     round(proceeds, 2),
             "Exit_Date":    date.strftime("%Y-%m-%d"),
             "Exit_Price":   round(exit_price, 2),
             "Exit_Reason":  "End of Data",
@@ -566,6 +574,9 @@ def print_report(symbol: str, trades: List[Dict], df: pd.DataFrame) -> None:
     wins   = tdf[tdf["Result"] == "WIN"]
     losses = tdf[tdf["Result"] == "LOSS"]
     total_pnl = tdf["PnL"].sum()
+    total_cost = tdf["Cost"].sum() if "Cost" in tdf.columns else 0
+    total_proceeds = tdf["Proceeds"].sum() if "Proceeds" in tdf.columns else 0
+    overall_pnl_pct = (total_pnl / total_cost * 100) if total_cost > 0 else 0
     win_rate = len(wins) / n * 100
 
     avg_win  = wins["PnL%"].mean()  if len(wins)   > 0 else 0
@@ -581,7 +592,9 @@ def print_report(symbol: str, trades: List[Dict], df: pd.DataFrame) -> None:
     print(f"  Wins:            {len(wins)}    ({win_rate:.1f}%)")
     print(f"  Losses:          {len(losses)}    ({100 - win_rate:.1f}%)")
     print("-" * 72)
-    print(f"  Total P&L:       HK${total_pnl:>+10.2f}")
+    print(f"  Total Cost:      HK${total_cost:>10,.2f}")
+    print(f"  Total Proceeds:  HK${total_proceeds:>10,.2f}")
+    print(f"  Total P&L:       HK${total_pnl:>+10.2f}  (Overall Return: {overall_pnl_pct:+.1f}%)")
     print(f"  Avg Win:         {avg_win:>+8.2f}%")
     print(f"  Avg Loss:        {avg_loss:>+8.2f}%")
     print(f"  Avg Hold Days:   {tdf['Hold_Days'].mean():.1f}")
