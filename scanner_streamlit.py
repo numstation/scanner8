@@ -90,8 +90,8 @@ with tab_scan:
             st.markdown("**Core (BUY)**")
             scan_core_trend = st.checkbox("Require Close > SMA20", value=True, key="scan_core_trend")
             scan_core_pdi_mdi = st.checkbox("Require PDI > MDI", value=True, key="scan_core_pdi_mdi")
-            scan_pdi_buffer = st.number_input("PDI must exceed MDI by (≥)", min_value=0.0, max_value=20.0, value=0.0, step=0.5, format="%.1f", key="scan_pdi_buffer")
-            scan_adx_min = st.number_input("ADX min", min_value=10, max_value=40, value=20, step=1, key="scan_adx_min")
+            scan_pdi_buffer = st.number_input("PDI must exceed MDI by (≥)", min_value=-20.0, max_value=20.0, value=0.0, step=0.5, format="%.1f", key="scan_pdi_buffer", help="Negative = allow MDI>PDI (e.g. -5 lets PDI be up to 5 below MDI)")
+            scan_adx_min = st.number_input("ADX min", min_value=0, max_value=40, value=20, step=1, key="scan_adx_min")
             scan_adx_max = st.number_input("ADX max", min_value=30, max_value=70, value=50, step=1, key="scan_adx_max")
             scan_adx_awakening = st.checkbox("龍抬頭 (ADX down→up)", value=False, key="scan_adx_awakening", help="Require ADX slope turning from down to up (best entry)")
         with sc2:
@@ -214,8 +214,8 @@ with tab_backtest:
             st.markdown("**Core (BUY)**")
             core_require_trend = st.checkbox("Require Close > SMA20", value=True, key="core_trend")
             core_require_pdi_mdi = st.checkbox("Require PDI > MDI", value=True, key="core_pdi_mdi")
-            pdi_buffer = st.number_input("PDI must exceed MDI by (≥)", min_value=0.0, max_value=20.0, value=0.0, step=0.5, format="%.1f", key="pdi_buffer")
-            adx_min = st.number_input("ADX min (trend floor)", min_value=10, max_value=40, value=20, step=1, key="adx_min")
+            pdi_buffer = st.number_input("PDI must exceed MDI by (≥)", min_value=-20.0, max_value=20.0, value=0.0, step=0.5, format="%.1f", key="pdi_buffer", help="Negative = allow MDI>PDI (e.g. -5 lets PDI be up to 5 below MDI)")
+            adx_min = st.number_input("ADX min (trend floor)", min_value=0, max_value=40, value=20, step=1, key="adx_min")
             adx_max = st.number_input("ADX max (not overheated)", min_value=30, max_value=70, value=50, step=1, key="adx_max")
             core_require_adx_awakening = st.checkbox("龍抬頭 (ADX down→up)", value=False, key="core_adx_awakening", help="Require ADX slope turning from down to up (best entry)")
         with c2:
