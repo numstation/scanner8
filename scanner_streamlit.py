@@ -44,7 +44,7 @@ st.set_page_config(
 )
 
 st.title("📊 Numstation Stock Scanner & Backtest")
-st.caption("Core: Close>SMA20, 20<ADX<50, PDI>MDI  |  Score 2/3: RSI>50, MFI>55, RVOL≥1.0")
+st.caption("Core: Close>SMA20, 20<ADX<50, PDI>MDI  |  Score 3/4: RSI>50, MFI>55, RVOL≥1.0, Spread>0")
 
 tab_scan, tab_backtest = st.tabs(["Scanner", "Backtest"])
 
@@ -99,10 +99,11 @@ with tab_scan:
             scan_rsi_entry = st.number_input("RSI >", min_value=30, max_value=70, value=50, step=1, key="scan_rsi_entry")
             scan_mfi_entry = st.number_input("MFI >", min_value=30, max_value=70, value=55, step=1, key="scan_mfi_entry")
             scan_rvol_min = st.number_input("RVOL ≥", min_value=0.5, max_value=2.0, value=1.0, step=0.1, format="%.1f", key="scan_rvol_min")
+            st.caption("4. Spread > 0 (MFI > RSI) = institutional accumulation")
         with sc3:
             st.markdown("**Trigger**")
-            scan_scorecard_min = st.slider("Score ≥ (out of 3)", min_value=1, max_value=3, value=2, key="scan_scorecard_min")
-            st.caption("Need at least this many of RSI/MFI/RVOL to trigger BUY (with Core true).")
+            scan_scorecard_min = st.slider("Score ≥ (out of 4)", min_value=1, max_value=4, value=3, key="scan_scorecard_min")
+            st.caption("Need at least this many of RSI/MFI/RVOL/Spread to trigger BUY (with Core true).")
 
     with st.expander("Adjust sell rules", expanded=False):
         st.caption("Turn exit conditions on/off. Same layout as Backtest. Scanner uses: SMA20, PDI<MDI, Profit take.")
@@ -167,7 +168,7 @@ with tab_scan:
                 df = pd.DataFrame(results)
                 df[" "] = df["Signal"].apply(lambda s: "🟢" if "BUY" in s else ("🔴" if "SELL" in s else "🟠"))
                 # Match backtest table: signal + entry indicators (ADX, slope, PDI, MDI, RSI, MFI, RVOL)
-                cols = [" ", "Ticker", "Price", "Signal", "Why", "ADX", "ADX_Slope", "PDI", "MDI", "RSI", "MFI", "RVOL"]
+                cols = [" ", "Ticker", "Price", "Signal", "Why", "ADX", "ADX_Slope", "PDI", "MDI", "RSI", "MFI", "RVOL", "Spread"]
                 cols = [c for c in cols if c in df.columns]
                 st.dataframe(df[cols], use_container_width=True, hide_index=True)
             else:
@@ -181,7 +182,7 @@ with tab_scan:
 # ========== TAB 2: Backtest ==========
 with tab_backtest:
     st.subheader("Veteran backtest (single symbol)")
-    st.caption("Uses same Core + Score 2/3 logic as the scanner. Data: yfinance (1y default).")
+    st.caption("Uses same Core + Score 3/4 logic as the scanner. Data: yfinance (1y default).")
 
     # Load backtest_options from the same directory as this script (works from any cwd / Streamlit Cloud)
     import importlib.util
@@ -224,10 +225,11 @@ with tab_backtest:
             rsi_entry = st.number_input("RSI > (momentum)", min_value=30, max_value=70, value=50, step=1, key="rsi_entry")
             mfi_entry = st.number_input("MFI > (money flow)", min_value=30, max_value=70, value=55, step=1, key="mfi_entry")
             rvol_min = st.number_input("RVOL ≥ (volume)", min_value=0.5, max_value=2.0, value=1.0, step=0.1, format="%.1f", key="rvol_min")
+            st.caption("4. Spread > 0 (MFI > RSI) = institutional accumulation")
         with c3:
             st.markdown("**Trigger**")
-            scorecard_min = st.slider("Score ≥ (out of 3)", min_value=1, max_value=3, value=2, key="scorecard_min")
-            st.caption("Need at least this many of RSI/MFI/RVOL to trigger BUY (with Core true).")
+            scorecard_min = st.slider("Score ≥ (out of 4)", min_value=1, max_value=4, value=3, key="scorecard_min")
+            st.caption("Need at least this many of RSI/MFI/RVOL/Spread to trigger BUY (with Core true).")
 
     with st.expander("Adjust sell rules", expanded=False):
         st.caption("Turn exit conditions on/off and edit parameters. Order: SMA20 → Trailing → Profit take → PDI<MDI → Stop loss → Month-end.")
@@ -278,7 +280,7 @@ with tab_backtest:
 
                     df = fetch_data_yfinance(symbol, period=period)
                     df = add_indicators(df)
-                    required = ["SMA20", "RSI14", "ADX", "ADX_prev", "ADX_prev2", "PDI", "MDI", "MFI14", "RVOL", "ATR14"]
+                    required = ["SMA20", "RSI14", "ADX", "ADX_prev", "ADX_prev2", "PDI", "MDI", "MFI14", "RVOL", "Spread", "ATR14"]
                     valid = df.dropna(subset=required)
                     if len(valid) < 10:
                         st.warning(f"Not enough valid bars after warm-up ({len(valid)}). Try a longer period.")
@@ -305,7 +307,7 @@ with tab_backtest:
                             c3.metric("Avg Win %", f"{avg_win:+.2f}%", None)
                             c4.metric("Avg Loss %", f"{avg_loss:+.2f}%", None)
 
-                            log_cols = ["Entry_Date", "Entry_Price", "Entry_Reason", "E_ADX", "E_ADX_Slope", "E_PDI", "E_MDI", "E_RSI", "E_MFI", "E_RVOL", "Exit_Date", "Exit_Price", "Exit_Reason", "Hold_Days", "PnL", "PnL%", "Result"]
+                            log_cols = ["Entry_Date", "Entry_Price", "Entry_Reason", "E_ADX", "E_ADX_Slope", "E_PDI", "E_MDI", "E_RSI", "E_MFI", "E_RVOL", "E_Spread", "Exit_Date", "Exit_Price", "Exit_Reason", "Hold_Days", "PnL", "PnL%", "Result"]
                             log_cols = [c for c in log_cols if c in tdf.columns]
                             st.dataframe(tdf[log_cols], use_container_width=True, hide_index=True)
                 except Exception as e:

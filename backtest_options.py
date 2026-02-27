@@ -66,7 +66,7 @@ PDI_BUFFER        = 0       # Legacy/chart: PDI > MDI + this (0 = same as Core P
 RSI_ENTRY         = 50      # Scorecard: RSI > 50 (1 pt)
 MFI_ENTRY         = 55      # Scorecard: MFI > 55 (1 pt)
 RVOL_MIN          = 1.0     # Scorecard: RVOL >= 1.0 (1 pt)
-SCORECARD_MIN     = 2       # Trigger: need at least 2 of 3 scorecard conditions
+SCORECARD_MIN     = 3       # Trigger: need at least 3 of 4 scorecard conditions (RSI, MFI, RVOL, Spread)
 STOP_LOSS_PCT     = 0.08    # 8% hard stop loss from entry price
 # Smart Exit (Veteran's Judgement)
 RSI_PROFIT_TAKING = 75    # RSI > this + bearish candle → sell 50% (climax exit)
@@ -274,6 +274,9 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     else:
         df["MFI14"] = _mfi(h, l, c, v, 14)
 
+    # ---- Money Flow Spread (MFI - RSI): institutional accumulation when Spread > 0 ----
+    df["Spread"] = df["MFI14"] - df["RSI14"]
+
     # ---- Volatility (for Smart Exit trailing stop) ----
     df["ATR14"] = ta.atr(h, l, c, length=14) if _HAS_PANDAS_TA else _atr(h, l, c, 14)
 
@@ -291,12 +294,12 @@ def _last_trading_day_of_month(dates: pd.DatetimeIndex) -> set:
 
 def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit: bool = True) -> List[Dict]:
     """
-    Veteran Logic: Core + Scorecard (MFI) with optional Smart Exit.
+    Veteran Logic: Core + Scorecard (MFI + Spread) with optional Smart Exit.
 
     BUY:
       CORE (all required): Close > SMA20, PDI > MDI, ADX > 20, ADX < 50.
-      SCORECARD (1 pt each, need 2 of 3): RSI>50, MFI>55, RVOL>=1.0.
-      TRIGGER: CORE true AND score >= 2.
+      SCORECARD (1 pt each, need 3 of 4): RSI>50, MFI>55, RVOL>=1.0, Spread>0 (MFI>RSI).
+      TRIGGER: CORE true AND score >= 3.
 
     SELL (use_smart_exit=True):
       1. Hard Exit: Close < SMA20 → SELL 100%
@@ -306,7 +309,7 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
 
     SELL (use_smart_exit=False): Close<SMA20 | PDI<MDI | Stop | Month-end → 100%.
     """
-    required = ["SMA20", "RSI14", "ADX", "ADX_prev", "ADX_prev2", "PDI", "MDI", "MFI14", "RVOL"]
+    required = ["SMA20", "RSI14", "ADX", "ADX_prev", "ADX_prev2", "PDI", "MDI", "MFI14", "RVOL", "Spread"]
     if use_smart_exit:
         required = required + ["ATR14", "Open"]
     trades: List[Dict] = []
@@ -324,6 +327,7 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
     entry_pdi = 0.0
     entry_mdi = 0.0
     entry_mfi = 0.0
+    entry_spread = 0.0
     entry_reason = ""
     entry_slope = 0.0
 
@@ -350,6 +354,7 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
             "E_MDI":        round(entry_mdi, 1),
             "E_RVOL":       round(entry_rvol, 2) if pd.notna(entry_rvol) else None,
             "E_MFI":        round(entry_mfi, 1) if pd.notna(entry_mfi) else None,
+            "E_Spread":     round(entry_spread, 1),
         })
 
     for i in range(len(df)):
@@ -370,6 +375,7 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
         pdi    = float(row["PDI"])
         mdi    = float(row["MDI"])
         mfi    = float(row["MFI14"]) if not pd.isna(row.get("MFI14")) else np.nan
+        spread = float(row["Spread"]) if not pd.isna(row.get("Spread")) else np.nan
         rvol   = row.get("RVOL")
         if pd.isna(rvol):
             continue
@@ -459,7 +465,7 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
             adx_awakening = (slope_prev <= 0 and slope_curr > 0) if CORE_REQUIRE_ADX_AWAKENING else True
             core = core_trend and core_pdi_mdi and core_adx_floor and core_adx_cap and adx_awakening
 
-            # ---- SCORECARD (1 pt each; need >= 2 of 3) ----
+            # ---- SCORECARD (1 pt each; need >= 3 of 4): RSI, MFI, RVOL, Spread>0 ----
             score = 0
             score_parts = []
             if rsi > RSI_ENTRY:
@@ -471,6 +477,9 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
             if rvol >= RVOL_MIN:
                 score += 1
                 score_parts.append("RVOL")
+            if not pd.isna(spread) and spread > 0:
+                score += 1
+                score_parts.append("Spread")
 
             buy_signal = core and (score >= SCORECARD_MIN)
             if buy_signal:
@@ -485,6 +494,7 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
                 entry_mdi  = mdi
                 entry_rvol = rvol
                 entry_mfi  = mfi
+                entry_spread = spread
                 entry_slope = slope_curr
                 # Build entry reason: Core + Score
                 core_parts = []
@@ -495,11 +505,11 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
                 core_parts.append(f"ADX{ADX_MIN}-{ADX_MAX}")
                 if CORE_REQUIRE_ADX_AWAKENING:
                     core_parts.append("龍抬頭")
-                entry_reason = "Core: " + ",".join(core_parts) + f" | Score {score}/3: " + ",".join(score_parts)
+                entry_reason = "Core: " + ",".join(core_parts) + f" | Score {score}/4: " + ",".join(score_parts)
                 if verbose:
                     print(f"  >>> BUY  {date.strftime('%Y-%m-%d')}  "
                           f"Close={close:.2f}  ADX={adx:.1f}  RSI={rsi:.1f}  MFI={mfi:.1f}  RVOL={rvol:.2f}  "
-                          f"Score={score}/3  PDI={pdi:.1f}  MDI={mdi:.1f}")
+                          f"Score={score}/4  Spread={spread:.1f}  PDI={pdi:.1f}  MDI={mdi:.1f}")
 
     # If still in position at last bar, force close
     if in_position:
@@ -526,6 +536,7 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
             "E_MDI":        round(entry_mdi, 1),
             "E_RVOL":       round(entry_rvol, 2) if pd.notna(entry_rvol) else None,
             "E_MFI":        round(entry_mfi, 1) if pd.notna(entry_mfi) else None,
+            "E_Spread":     round(entry_spread, 1),
         })
 
     return trades
@@ -587,7 +598,7 @@ def print_report(symbol: str, trades: List[Dict], df: pd.DataFrame) -> None:
     pd.set_option("display.width", 140)
     log_cols = [
         "Entry_Date", "Entry_Price", "Entry_Reason",
-        "E_ADX", "E_ADX_Slope", "E_PDI", "E_MDI", "E_RSI", "E_MFI", "E_RVOL",
+        "E_ADX", "E_ADX_Slope", "E_PDI", "E_MDI", "E_RSI", "E_MFI", "E_RVOL", "E_Spread",
         "Exit_Date", "Exit_Price", "Exit_Reason",
         "Hold_Days", "PnL", "PnL%", "Result",
     ]
@@ -613,7 +624,7 @@ def print_report(symbol: str, trades: List[Dict], df: pd.DataFrame) -> None:
         print("\n--- Losing Trades Analysis (Indicators at Entry) ---\n")
         fail_cols = [
             "Entry_Date", "Entry_Price", "Entry_Reason", "Exit_Reason",
-            "PnL%", "E_ADX", "E_ADX_Slope", "E_RSI", "E_PDI", "E_MDI", "E_MFI", "E_RVOL",
+            "PnL%", "E_ADX", "E_ADX_Slope", "E_RSI", "E_PDI", "E_MDI", "E_MFI", "E_RVOL", "E_Spread",
         ]
         fail_cols = [c for c in fail_cols if c in losses.columns]
         print(losses[fail_cols].to_string(index=False))
@@ -669,7 +680,8 @@ def run_backtesting_py(df: pd.DataFrame, symbol: str = "9988.HK") -> None:
                 )
                 rvol = self.data.RVOL[-1] if hasattr(self.data, "RVOL") and len(self.data.RVOL) else np.nan
                 mfi = self.data.MFI14[-1] if hasattr(self.data, "MFI14") and len(self.data.MFI14) else np.nan
-                score = (1 if self.rsi[-1] > RSI_ENTRY else 0) + (1 if (not np.isnan(mfi) and mfi > MFI_ENTRY) else 0) + (1 if (not np.isnan(rvol) and rvol >= RVOL_MIN) else 0)
+                spread = self.data.Spread[-1] if hasattr(self.data, "Spread") and len(self.data.Spread) else np.nan
+                score = (1 if self.rsi[-1] > RSI_ENTRY else 0) + (1 if (not np.isnan(mfi) and mfi > MFI_ENTRY) else 0) + (1 if (not np.isnan(rvol) and rvol >= RVOL_MIN) else 0) + (1 if (not np.isnan(spread) and spread > 0) else 0)
                 if core and score >= SCORECARD_MIN:
                     self.buy()
                     self._entry_price = price
@@ -682,7 +694,7 @@ def run_backtesting_py(df: pd.DataFrame, symbol: str = "9988.HK") -> None:
                 ):
                     self.position.close()
 
-    valid = df.dropna(subset=["SMA20", "RSI14", "ADX", "ADX_prev", "ADX_prev2", "PDI", "MDI", "MFI14", "RVOL", "ATR14"])
+    valid = df.dropna(subset=["SMA20", "RSI14", "ADX", "ADX_prev", "ADX_prev2", "PDI", "MDI", "MFI14", "RVOL", "Spread", "ATR14"])
     if len(valid) < 20:
         return
 
@@ -716,7 +728,7 @@ def run_one_symbol(ticker: str, verbose: bool = True) -> Optional[Dict]:
         return None
 
     df = add_indicators(df)
-    valid = df.dropna(subset=["SMA20", "RSI14", "ADX", "ADX_prev", "ADX_prev2", "PDI", "MDI", "MFI14", "RVOL", "ATR14"])
+    valid = df.dropna(subset=["SMA20", "RSI14", "ADX", "ADX_prev", "ADX_prev2", "PDI", "MDI", "MFI14", "RVOL", "Spread", "ATR14"])
     if len(valid) < 10:
         print(f"[{ticker}] Not enough valid rows after warm-up")
         return None
@@ -803,7 +815,7 @@ def run_stress_test() -> None:
     print("=" * 80)
     print("  VETERAN — STRESS TEST (Core + Scorecard + MFI)")
     print("=" * 80)
-    print("  Buy:  CORE (Close>SMA20, PDI>MDI, 20<ADX<50) + Score≥2/3 (RSI>50, MFI>55, RVOL>=1.0)")
+    print("  Buy:  CORE (Close>SMA20, PDI>MDI, 20<ADX<50) + Score≥3/4 (RSI>50, MFI>55, RVOL>=1.0, Spread>0)")
     print("  Sell: Close<SMA20 | PDI<MDI | -8% stop | month-end")
     print("=" * 80)
 
@@ -860,7 +872,7 @@ def run_compare(symbols: Optional[List[str]] = None) -> None:
             rows.append({"symbol": ticker, "pnl_legacy": None, "pnl_smart": None, "n_legacy": 0, "n_smart": 0})
             continue
         df = add_indicators(df)
-        valid = df.dropna(subset=["SMA20", "RSI14", "ADX", "ADX_prev", "ADX_prev2", "PDI", "MDI", "MFI14", "RVOL", "ATR14"])
+        valid = df.dropna(subset=["SMA20", "RSI14", "ADX", "ADX_prev", "ADX_prev2", "PDI", "MDI", "MFI14", "RVOL", "Spread", "ATR14"])
         if len(valid) < 10:
             print(f"  Not enough valid data")
             rows.append({"symbol": ticker, "pnl_legacy": None, "pnl_smart": None, "n_legacy": 0, "n_smart": 0})
@@ -903,7 +915,7 @@ def main(symbol: Optional[str] = None):
     print("=" * 72)
     print(f"  {ticker} — VETERAN BACKTEST (Core + Scorecard + MFI)")
     print("=" * 72)
-    print(f"  BUY:   CORE: Close>SMA20, PDI>MDI, {ADX_MIN}<ADX<{ADX_MAX}  |  SCORE (≥{SCORECARD_MIN}/3): RSI>{RSI_ENTRY}, MFI>{MFI_ENTRY}, RVOL>={RVOL_MIN}")
+    print(f"  BUY:   CORE: Close>SMA20, PDI>MDI, {ADX_MIN}<ADX<{ADX_MAX}  |  SCORE (≥{SCORECARD_MIN}/4): RSI>{RSI_ENTRY}, MFI>{MFI_ENTRY}, RVOL>={RVOL_MIN}, Spread>0")
     print(f"  Exit:  Smart Exit (Hard / Trailing 3*ATR / Profit Take 50%) + PDI<MDI | -8% stop | month-end")
     print("=" * 72)
 
@@ -922,7 +934,7 @@ def main(symbol: Optional[str] = None):
     print("Computing indicators...")
     df = add_indicators(df)
 
-    valid = df.dropna(subset=["SMA20", "RSI14", "ADX", "ADX_prev", "ADX_prev2", "PDI", "MDI", "MFI14", "RVOL", "ATR14"])
+    valid = df.dropna(subset=["SMA20", "RSI14", "ADX", "ADX_prev", "ADX_prev2", "PDI", "MDI", "MFI14", "RVOL", "Spread", "ATR14"])
     print(f"Valid rows: {len(valid)} / {len(df)}  (after indicator warm-up)\n")
 
     if len(valid) < 10:

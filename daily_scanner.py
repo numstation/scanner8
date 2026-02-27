@@ -3,7 +3,7 @@
 ==========================================================================
   Veteran v4.0 — Automated Daily Scanner (HK & US)
 ==========================================================================
-  Logic: Core (Close>SMA20, 20<ADX<50, PDI>MDI) + Score 2/3 (RSI>50, MFI>55, RVOL>=1.0)
+  Logic: Core (Close>SMA20, 20<ADX<50, PDI>MDI) + Score 3/4 (RSI>50, MFI>55, RVOL>=1.0, Spread>0)
   Run:   python daily_scanner.py                    # start scheduler (HK 17:00, US 08:30)
          python daily_scanner.py HK                 # run HK list once
          python daily_scanner.py US                 # run US list once
@@ -114,7 +114,7 @@ def get_tickers(market: str) -> list:
     return []
 
 
-# --- 2. VETERAN v4.0 SIGNAL (Core + Score 2/3) ---
+# --- 2. VETERAN v4.0 SIGNAL (Core + Score 3/4) ---
 def _fetch_ohlcv(ticker: str, period: str = "6mo") -> pd.DataFrame | None:
     """Fetch OHLCV using same method as backtest (Ticker.history) to avoid yfinance download quirks."""
     try:
@@ -146,7 +146,7 @@ def analyze_stock(
     rsi_entry: int = 50,
     mfi_entry: int = 55,
     rvol_min: float = 1.0,
-    scorecard_min: int = 2,
+    scorecard_min: int = 3,
     rsi_profit_take: int = 75,
     sell_use_sma20: bool = True,
     sell_use_pdi_mdi: bool = True,
@@ -175,6 +175,7 @@ def analyze_stock(
         df["MDI"] = adx_ind.adx_neg()   # -DI
         vol_sma = v.rolling(window=20, min_periods=1).mean().replace(0, float("nan"))
         df["RVOL"] = v / vol_sma
+        df["Spread"] = df["MFI"] - df["RSI"]
         df["ADX_prev"] = df["ADX"].shift(1)
         df["ADX_prev2"] = df["ADX"].shift(2)
 
@@ -196,7 +197,7 @@ def analyze_stock(
         adx_awakening = (slope_prev <= 0 and slope_curr > 0) if core_require_adx_awakening else True
         core_pass = trend_ok and adx_ok and pdi_ok and adx_awakening
 
-        # SCORECARD (configurable)
+        # SCORECARD (configurable): RSI, MFI, RVOL, Spread>0
         score = 0
         details = []
         if float(curr["RSI"]) > rsi_entry:
@@ -207,7 +208,11 @@ def analyze_stock(
             details.append("MFI")
         if pd.notna(curr.get("RVOL")) and float(curr["RVOL"]) >= rvol_min:
             score += 1
-            details.append("VOL")
+            details.append("RVOL")
+        spread_val = curr.get("Spread")
+        if pd.notna(spread_val) and float(spread_val) > 0:
+            score += 1
+            details.append("Spread")
 
         signal = None
         close_curr = float(curr["Close"])
@@ -215,7 +220,7 @@ def analyze_stock(
         sma20_curr = float(curr["SMA20"])
 
         if core_pass and score >= scorecard_min:
-            signal = f"BUY ({score}/3)"
+            signal = f"BUY ({score}/4)"
         elif sell_use_profit_take and close_curr > sma20_curr and float(curr["RSI"]) > rsi_profit_take and close_curr < open_curr:
             signal = "PROFIT TAKE"
             details = [f"RSI>{rsi_profit_take}", "Bearish"]
@@ -244,6 +249,7 @@ def analyze_stock(
                 "RSI": f"{curr['RSI']:.1f}",
                 "MFI": mfi_str,
                 "RVOL": rvol_str,
+                "Spread": f"{float(spread_val):.1f}" if pd.notna(spread_val) else "—",
             }
     except Exception:
         return None
