@@ -166,9 +166,10 @@ with tab_scan:
                 st.success(f"Found **{len(results)}** actionable signal(s).")
                 df = pd.DataFrame(results)
                 df[" "] = df["Signal"].apply(lambda s: "🟢" if "BUY" in s else ("🔴" if "SELL" in s else "🟠"))
-                cols = [" ", "Ticker", "Price", "Signal", "Why", "ADX", "RSI", "RVOL"]
-                df = df[[c for c in cols if c in df.columns]]
-                st.dataframe(df, use_container_width=True, hide_index=True)
+                # Match backtest table: signal + entry indicators (ADX, slope, PDI, MDI, RSI, MFI, RVOL)
+                cols = [" ", "Ticker", "Price", "Signal", "Why", "ADX", "ADX_Slope", "PDI", "MDI", "RSI", "MFI", "RVOL"]
+                cols = [c for c in cols if c in df.columns]
+                st.dataframe(df[cols], use_container_width=True, hide_index=True)
             else:
                 st.info("No actionable signals today. Stay cash.")
 

@@ -231,13 +231,18 @@ def analyze_stock(
 
         if signal:
             rvol_str = f"{curr['RVOL']:.2f}" if pd.notna(curr.get("RVOL")) else "—"
+            mfi_str = f"{curr['MFI']:.1f}" if pd.notna(curr.get("MFI")) else "—"
             return {
                 "Ticker": ticker,
                 "Price": f"{curr['Close']:.2f}",
                 "Signal": signal,
                 "Why": ",".join(details),
                 "ADX": f"{adx:.1f}",
+                "ADX_Slope": f"{slope_curr:.2f}",
+                "PDI": f"{pdi:.1f}",
+                "MDI": f"{mdi:.1f}",
                 "RSI": f"{curr['RSI']:.1f}",
+                "MFI": mfi_str,
                 "RVOL": rvol_str,
             }
     except Exception:
@@ -265,12 +270,16 @@ def _run_scan_with_tickers(tickers: list, label: str) -> None:
             time.sleep(0.25)
     print(" done.\n" + "=" * 85)
     if results:
-        print(f" {'Ticker':<10} {'Price':<10} {'Signal':<20} {'Why':<15} {'ADX':<6} {'RSI':<6} {'RVOL':<6}")
-        print("-" * 85)
+        print(f" {'Ticker':<8} {'Price':<8} {'Signal':<18} {'Why':<12} {'ADX':<5} {'Slope':<6} {'PDI':<5} {'MDI':<5} {'RSI':<5} {'MFI':<5} {'RVOL':<5}")
+        print("-" * 100)
         for r in results:
             sig = r["Signal"]
             icon = "🟢" if "BUY" in sig else ("🔴" if "SELL" in sig else "🟠")
-            print(f"{icon} {r['Ticker']:<8} {r['Price']:<10} {r['Signal']:<20} {r['Why']:<15} {r['ADX']:<6} {r['RSI']:<6} {r['RVOL']:<6}")
+            adx_slope = r.get("ADX_Slope", "—")
+            pdi = r.get("PDI", "—")
+            mdi = r.get("MDI", "—")
+            mfi = r.get("MFI", "—")
+            print(f"{icon} {r['Ticker']:<6} {r['Price']:<8} {r['Signal']:<18} {r['Why']:<12} {r['ADX']:<5} {adx_slope:<6} {pdi:<5} {mdi:<5} {r['RSI']:<5} {mfi:<5} {r['RVOL']:<5}")
     else:
         print(" No actionable signals today. Stay cash.")
     print("=" * 85)
