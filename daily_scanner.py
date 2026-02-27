@@ -146,6 +146,7 @@ def analyze_stock(
     rsi_entry: int = 50,
     mfi_entry: int = 55,
     rvol_min: float = 1.0,
+    require_spread: bool = True,
     scorecard_min: int = 3,
     rsi_profit_take: int = 75,
     sell_use_sma20: bool = True,
@@ -210,7 +211,7 @@ def analyze_stock(
             score += 1
             details.append("RVOL")
         spread_val = curr.get("Spread")
-        if pd.notna(spread_val) and float(spread_val) > 0:
+        if require_spread and pd.notna(spread_val) and float(spread_val) > 0:
             score += 1
             details.append("Spread")
 
@@ -220,7 +221,8 @@ def analyze_stock(
         sma20_curr = float(curr["SMA20"])
 
         if core_pass and score >= scorecard_min:
-            signal = f"BUY ({score}/4)"
+            score_max = 4 if require_spread else 3
+            signal = f"BUY ({score}/{score_max})"
         elif sell_use_profit_take and close_curr > sma20_curr and float(curr["RSI"]) > rsi_profit_take and close_curr < open_curr:
             signal = "PROFIT TAKE"
             details = [f"RSI>{rsi_profit_take}", "Bearish"]

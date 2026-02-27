@@ -85,6 +85,7 @@ SELL_USE_STOP_LOSS   = True   # Sell at -STOP_LOSS_PCT
 SELL_USE_TRAILING    = True   # Sell on trailing stop (Smart Exit)
 SELL_USE_PROFIT_TAKE = True   # Sell 50% on RSI climax (Smart Exit)
 SELL_USE_MONTH_END   = True   # Force close at month-end
+SCORE_REQUIRE_SPREAD = True   # Scorecard: include Spread > 0 (MFI > RSI) as 4th item
 
 
 # ===========================================================================
@@ -465,7 +466,7 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
             adx_awakening = (slope_prev <= 0 and slope_curr > 0) if CORE_REQUIRE_ADX_AWAKENING else True
             core = core_trend and core_pdi_mdi and core_adx_floor and core_adx_cap and adx_awakening
 
-            # ---- SCORECARD (1 pt each; need >= 3 of 4): RSI, MFI, RVOL, Spread>0 ----
+            # ---- SCORECARD (1 pt each): RSI, MFI, RVOL, optionally Spread>0 ----
             score = 0
             score_parts = []
             if rsi > RSI_ENTRY:
@@ -477,7 +478,7 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
             if rvol >= RVOL_MIN:
                 score += 1
                 score_parts.append("RVOL")
-            if not pd.isna(spread) and spread > 0:
+            if SCORE_REQUIRE_SPREAD and not pd.isna(spread) and spread > 0:
                 score += 1
                 score_parts.append("Spread")
 
@@ -505,11 +506,13 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
                 core_parts.append(f"ADX{ADX_MIN}-{ADX_MAX}")
                 if CORE_REQUIRE_ADX_AWAKENING:
                     core_parts.append("龍抬頭")
-                entry_reason = "Core: " + ",".join(core_parts) + f" | Score {score}/4: " + ",".join(score_parts)
+                score_max = 4 if SCORE_REQUIRE_SPREAD else 3
+                entry_reason = "Core: " + ",".join(core_parts) + f" | Score {score}/{score_max}: " + ",".join(score_parts)
                 if verbose:
+                    score_max = 4 if SCORE_REQUIRE_SPREAD else 3
                     print(f"  >>> BUY  {date.strftime('%Y-%m-%d')}  "
                           f"Close={close:.2f}  ADX={adx:.1f}  RSI={rsi:.1f}  MFI={mfi:.1f}  RVOL={rvol:.2f}  "
-                          f"Score={score}/4  Spread={spread:.1f}  PDI={pdi:.1f}  MDI={mdi:.1f}")
+                          f"Score={score}/{score_max}  Spread={spread:.1f}  PDI={pdi:.1f}  MDI={mdi:.1f}")
 
     # If still in position at last bar, force close
     if in_position:
@@ -681,7 +684,8 @@ def run_backtesting_py(df: pd.DataFrame, symbol: str = "9988.HK") -> None:
                 rvol = self.data.RVOL[-1] if hasattr(self.data, "RVOL") and len(self.data.RVOL) else np.nan
                 mfi = self.data.MFI14[-1] if hasattr(self.data, "MFI14") and len(self.data.MFI14) else np.nan
                 spread = self.data.Spread[-1] if hasattr(self.data, "Spread") and len(self.data.Spread) else np.nan
-                score = (1 if self.rsi[-1] > RSI_ENTRY else 0) + (1 if (not np.isnan(mfi) and mfi > MFI_ENTRY) else 0) + (1 if (not np.isnan(rvol) and rvol >= RVOL_MIN) else 0) + (1 if (not np.isnan(spread) and spread > 0) else 0)
+                spread_pt = (1 if (SCORE_REQUIRE_SPREAD and not np.isnan(spread) and spread > 0) else 0)
+                score = (1 if self.rsi[-1] > RSI_ENTRY else 0) + (1 if (not np.isnan(mfi) and mfi > MFI_ENTRY) else 0) + (1 if (not np.isnan(rvol) and rvol >= RVOL_MIN) else 0) + spread_pt
                 if core and score >= SCORECARD_MIN:
                     self.buy()
                     self._entry_price = price
