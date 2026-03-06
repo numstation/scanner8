@@ -75,6 +75,11 @@ CLOSE_VS_SMA50    = "off"
 OBV_VS_OBV_EMA20  = "off"
 CLOSE_VS_VWAP     = "off"
 MFI_VS_RSI        = "off"   # "off" | "mfi>rsi" | "rsi>mfi"
+RSI_OP            = "off"   # "off" | ">" | "<" | ">=" | "<="  (RSI vs RSI_VALUE)
+RSI_VALUE         = 50.0
+MFI_OP            = "off"
+MFI_VALUE         = 55.0
+ADX_SLOPE_OP      = "off"   # ADX slope vs 0
 CORE_REQUIRE_PDI_MDI = True
 CORE_REQUIRE_ADX_AWAKENING = False
 SELL_USE_ADX_EXHAUSTION    = False
@@ -512,8 +517,12 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
                 mfi_rsi_ok = float(mfi) > float(rsi)
             elif MFI_VS_RSI == "rsi>mfi" and not pd.isna(mfi) and not pd.isna(rsi):
                 mfi_rsi_ok = float(rsi) > float(mfi)
+            rsi_ok = _check_op(float(rsi) if not pd.isna(rsi) else None, RSI_VALUE, RSI_OP)
+            mfi_ok = _check_op(float(mfi) if not pd.isna(mfi) else None, MFI_VALUE, MFI_OP)
+            adx_slope_ok = _check_op(slope_curr, 0.0, ADX_SLOPE_OP)
             core = (close_sma20_ok and close_sma50_ok and obv_ok and close_vwap_ok and
-                    core_pdi_mdi and core_adx_floor and core_adx_cap and adx_awakening and mfi_rsi_ok)
+                    core_pdi_mdi and core_adx_floor and core_adx_cap and adx_awakening and mfi_rsi_ok
+                    and rsi_ok and mfi_ok and adx_slope_ok)
 
             buy_signal = core
             if buy_signal:
@@ -545,6 +554,12 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
                     core_parts.append(f"Close{CLOSE_VS_VWAP}VWAP")
                 if MFI_VS_RSI not in (None, "", "off"):
                     core_parts.append(MFI_VS_RSI)
+                if RSI_OP not in (None, "", "off"):
+                    core_parts.append(f"RSI{RSI_OP}{RSI_VALUE}")
+                if MFI_OP not in (None, "", "off"):
+                    core_parts.append(f"MFI{MFI_OP}{MFI_VALUE}")
+                if ADX_SLOPE_OP not in (None, "", "off"):
+                    core_parts.append(f"ADX_slope{ADX_SLOPE_OP}0")
                 if CORE_REQUIRE_PDI_MDI:
                     core_parts.append(f"PDI>MDI+{PDI_BUFFER}" if PDI_BUFFER != 0 else "PDI>MDI")
                 core_parts.append(f"ADX{ADX_MIN}-{ADX_MAX}")

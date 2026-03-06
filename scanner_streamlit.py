@@ -107,6 +107,13 @@ with tab_scan:
             scan_obv_vs_obv_ema20 = st.selectbox("OBV vs OBV_EMA_20", OPTS, index=0, key="scan_obv_ema")
             scan_close_vs_vwap = st.selectbox("Close vs VWAP (20d)", OPTS, index=0, key="scan_close_vwap")
             scan_mfi_vs_rsi = st.selectbox("MFI vs RSI", ["Off", "MFI > RSI", "RSI > MFI"], index=0, key="scan_mfi_rsi")
+            st.markdown("**RSI / MFI vs value**")
+            scan_rsi_op = st.selectbox("RSI", OPTS, index=0, key="scan_rsi_op")
+            scan_rsi_value = st.number_input("RSI value", min_value=0, max_value=100, value=50, step=1, key="scan_rsi_val")
+            scan_mfi_op = st.selectbox("MFI", OPTS, index=0, key="scan_mfi_op")
+            scan_mfi_value = st.number_input("MFI value", min_value=0, max_value=100, value=55, step=1, key="scan_mfi_val")
+            st.markdown("**ADX slope vs 0**")
+            scan_adx_slope_op = st.selectbox("ADX slope", OPTS, index=0, key="scan_adx_slope_op")
         with sc2:
             st.markdown("**ADX & PDI**")
             scan_core_pdi_mdi = st.checkbox("Require PDI > MDI", value=False, key="scan_core_pdi_mdi")
@@ -147,6 +154,11 @@ with tab_scan:
                 "obv_vs_obv_ema20": _op(scan_obv_vs_obv_ema20),
                 "close_vs_vwap": _op(scan_close_vs_vwap),
                 "mfi_vs_rsi": _mfi(scan_mfi_vs_rsi),
+                "rsi_op": _op(scan_rsi_op),
+                "rsi_value": float(scan_rsi_value),
+                "mfi_op": _op(scan_mfi_op),
+                "mfi_value": float(scan_mfi_value),
+                "adx_slope_op": _op(scan_adx_slope_op),
                 "core_require_pdi_mdi": scan_core_pdi_mdi,
                 "pdi_buffer": float(scan_pdi_buffer),
                 "adx_min": int(scan_adx_min),
@@ -239,6 +251,13 @@ with tab_backtest:
             obv_vs_obv_ema20 = st.selectbox("OBV vs OBV_EMA_20", BT_OPTS, index=0, key="bt_obv_ema")
             close_vs_vwap = st.selectbox("Close vs VWAP (20d)", BT_OPTS, index=0, key="bt_close_vwap")
             mfi_vs_rsi = st.selectbox("MFI vs RSI", ["Off", "MFI > RSI", "RSI > MFI"], index=0, key="bt_mfi_rsi")
+            st.markdown("**RSI / MFI vs value**")
+            rsi_op = st.selectbox("RSI", BT_OPTS, index=0, key="bt_rsi_op")
+            rsi_value = st.number_input("RSI value", min_value=0, max_value=100, value=50, step=1, key="bt_rsi_val")
+            mfi_op = st.selectbox("MFI", BT_OPTS, index=0, key="bt_mfi_op")
+            mfi_value = st.number_input("MFI value", min_value=0, max_value=100, value=55, step=1, key="bt_mfi_val")
+            st.markdown("**ADX slope vs 0**")
+            adx_slope_op = st.selectbox("ADX slope", BT_OPTS, index=0, key="bt_adx_slope_op")
         with c2:
             st.markdown("**ADX & PDI**")
             core_require_pdi_mdi = st.checkbox("Require PDI > MDI", value=False, key="core_pdi_mdi")
@@ -280,6 +299,11 @@ with tab_backtest:
                     _bt.OBV_VS_OBV_EMA20 = _op(obv_vs_obv_ema20)
                     _bt.CLOSE_VS_VWAP = _op(close_vs_vwap)
                     _bt.MFI_VS_RSI = _mfi(mfi_vs_rsi)
+                    _bt.RSI_OP = _op(rsi_op)
+                    _bt.RSI_VALUE = float(rsi_value)
+                    _bt.MFI_OP = _op(mfi_op)
+                    _bt.MFI_VALUE = float(mfi_value)
+                    _bt.ADX_SLOPE_OP = _op(adx_slope_op)
                     _bt.CORE_REQUIRE_PDI_MDI = core_require_pdi_mdi
                     _bt.PDI_BUFFER = float(pdi_buffer)
                     _bt.ADX_MIN = int(adx_min)

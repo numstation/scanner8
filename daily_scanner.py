@@ -160,6 +160,11 @@ def analyze_stock(
     obv_vs_obv_ema20: str = "off",
     close_vs_vwap: str = "off",
     mfi_vs_rsi: str = "off",
+    rsi_op: str = "off",
+    rsi_value: float = 50.0,
+    mfi_op: str = "off",
+    mfi_value: float = 55.0,
+    adx_slope_op: str = "off",
     core_require_pdi_mdi: bool = True,
     pdi_buffer: float = 0.0,
     adx_min: int = 20,
@@ -239,7 +244,11 @@ def analyze_stock(
             mfi_rsi_ok = mfi_f > rsi_f
         elif mfi_vs_rsi == "rsi>mfi" and rsi_f is not None and mfi_f is not None:
             mfi_rsi_ok = rsi_f > mfi_f
-        core_pass = close_sma20_ok and close_sma50_ok and obv_ok and close_vwap_ok and adx_ok and pdi_ok and adx_awakening and mfi_rsi_ok
+        rsi_ok = _check_op(rsi_f, float(rsi_value), rsi_op)
+        mfi_ok = _check_op(mfi_f, float(mfi_value), mfi_op)
+        adx_slope_ok = _check_op(slope_curr, 0.0, adx_slope_op)
+        core_pass = (close_sma20_ok and close_sma50_ok and obv_ok and close_vwap_ok and adx_ok and pdi_ok
+                     and adx_awakening and mfi_rsi_ok and rsi_ok and mfi_ok and adx_slope_ok)
 
         details = []
 
