@@ -164,6 +164,8 @@ def analyze_stock(
     rsi_value: float = 50.0,
     mfi_op: str = "off",
     mfi_value: float = 55.0,
+    rvol_op: str = "off",
+    rvol_value: float = 1.0,
     adx_slope_op: str = "off",
     core_require_pdi_mdi: bool = True,
     pdi_buffer: float = 0.0,
@@ -227,6 +229,7 @@ def analyze_stock(
         vwap_f = float(curr["VWAP"]) if pd.notna(curr.get("VWAP")) else None
         rsi_f = float(curr["RSI"]) if pd.notna(curr.get("RSI")) else None
         mfi_f = float(curr["MFI"]) if pd.notna(curr.get("MFI")) else None
+        rvol_f = float(curr["RVOL"]) if pd.notna(curr.get("RVOL")) else None
 
         close_sma20_ok = _check_op(close_f, sma20_f, close_vs_sma20)
         close_sma50_ok = _check_op(close_f, sma50_f, close_vs_sma50)
@@ -246,9 +249,10 @@ def analyze_stock(
             mfi_rsi_ok = rsi_f > mfi_f
         rsi_ok = _check_op(rsi_f, float(rsi_value), rsi_op)
         mfi_ok = _check_op(mfi_f, float(mfi_value), mfi_op)
+        rvol_ok = _check_op(rvol_f, float(rvol_value), rvol_op)
         adx_slope_ok = _check_op(slope_curr, 0.0, adx_slope_op)
         core_pass = (close_sma20_ok and close_sma50_ok and obv_ok and close_vwap_ok and adx_ok and pdi_ok
-                     and adx_awakening and mfi_rsi_ok and rsi_ok and mfi_ok and adx_slope_ok)
+                     and adx_awakening and mfi_rsi_ok and rsi_ok and mfi_ok and rvol_ok and adx_slope_ok)
 
         details = []
 

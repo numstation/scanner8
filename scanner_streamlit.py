@@ -112,6 +112,8 @@ with tab_scan:
             scan_rsi_value = st.number_input("RSI value", min_value=0, max_value=100, value=50, step=1, key="scan_rsi_val")
             scan_mfi_op = st.selectbox("MFI", OPTS, index=0, key="scan_mfi_op")
             scan_mfi_value = st.number_input("MFI value", min_value=0, max_value=100, value=55, step=1, key="scan_mfi_val")
+            scan_rvol_op = st.selectbox("RVOL", OPTS, index=0, key="scan_rvol_op")
+            scan_rvol_value = st.number_input("RVOL value", min_value=0.0, max_value=10.0, value=1.0, step=0.1, format="%.1f", key="scan_rvol_val")
             st.markdown("**ADX slope vs 0**")
             scan_adx_slope_op = st.selectbox("ADX slope", OPTS, index=0, key="scan_adx_slope_op")
         with sc2:
@@ -158,6 +160,8 @@ with tab_scan:
                 "rsi_value": float(scan_rsi_value),
                 "mfi_op": _op(scan_mfi_op),
                 "mfi_value": float(scan_mfi_value),
+                "rvol_op": _op(scan_rvol_op),
+                "rvol_value": float(scan_rvol_value),
                 "adx_slope_op": _op(scan_adx_slope_op),
                 "core_require_pdi_mdi": scan_core_pdi_mdi,
                 "pdi_buffer": float(scan_pdi_buffer),
@@ -256,6 +260,8 @@ with tab_backtest:
             rsi_value = st.number_input("RSI value", min_value=0, max_value=100, value=50, step=1, key="bt_rsi_val")
             mfi_op = st.selectbox("MFI", BT_OPTS, index=0, key="bt_mfi_op")
             mfi_value = st.number_input("MFI value", min_value=0, max_value=100, value=55, step=1, key="bt_mfi_val")
+            rvol_op = st.selectbox("RVOL", BT_OPTS, index=0, key="bt_rvol_op")
+            rvol_value = st.number_input("RVOL value", min_value=0.0, max_value=10.0, value=1.0, step=0.1, format="%.1f", key="bt_rvol_val")
             st.markdown("**ADX slope vs 0**")
             adx_slope_op = st.selectbox("ADX slope", BT_OPTS, index=0, key="bt_adx_slope_op")
         with c2:
@@ -303,6 +309,8 @@ with tab_backtest:
                     _bt.RSI_VALUE = float(rsi_value)
                     _bt.MFI_OP = _op(mfi_op)
                     _bt.MFI_VALUE = float(mfi_value)
+                    _bt.RVOL_OP = _op(rvol_op)
+                    _bt.RVOL_VALUE = float(rvol_value)
                     _bt.ADX_SLOPE_OP = _op(adx_slope_op)
                     _bt.CORE_REQUIRE_PDI_MDI = core_require_pdi_mdi
                     _bt.PDI_BUFFER = float(pdi_buffer)
