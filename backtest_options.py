@@ -59,37 +59,34 @@ STRESS_TEST_SYMBOLS = [
     ("0002.HK", "CLP Holdings — low-vol inactivity"),
 ]
 
-# ---- Veteran parameters: Core + Scorecard ----
-ADX_MIN           = 20      # Core: trend floor — do not trade when ADX <= 20 (choppy/flat)
-ADX_MAX           = 50      # Core: do not enter if ADX > 50 (trend exhaustion)
-PDI_BUFFER        = 0       # Legacy/chart: PDI > MDI + this (0 = same as Core PDI>MDI)
-RSI_ENTRY         = 50      # Scorecard: RSI > 50 (1 pt)
-MFI_ENTRY         = 55      # Scorecard: MFI > 55 (1 pt)
-RVOL_MIN          = 1.0     # Scorecard: RVOL >= 1.0 (1 pt)
-SCORECARD_MIN     = 3       # Trigger: need at least 3 of 4 scorecard conditions (RSI, MFI, RVOL, Spread)
+# ---- Veteran parameters ----
+ADX_MIN           = 20      # ADX floor (no upper limit in UI)
+ADX_MAX           = 50      # ADX cap
+PDI_BUFFER        = 0       # PDI > MDI + this (0 = same as PDI>MDI)
 STOP_LOSS_PCT     = 0.08    # 8% hard stop loss from entry price
-# Smart Exit (Veteran's Judgement)
 RSI_PROFIT_TAKING = 75    # RSI > this + bearish candle → sell 50% (climax exit)
 ATR_TRAIL_MULT    = 3     # Trailing stop: Highest_High - (this * ATR)
 INITIAL_CASH     = 100_000 # HK$
 COMMISSION_PCT   = 0.002   # 0.2% per trade (buy + sell)
 
-# ---- Optional toggles (override from Streamlit or tests) ----
-CORE_REQUIRE_TREND   = True   # Core: require Close > SMA20
-CORE_REQUIRE_PDI_MDI = True   # Core: require PDI > MDI (uses PDI_BUFFER)
-CORE_REQUIRE_ADX_AWAKENING = False  # 龍抬頭: ADX slope down→up (best entry)
-SELL_USE_ADX_EXHAUSTION    = False  # 強弩之末: ADX slope up→down (strong sell)
-SELL_USE_SMA20       = True   # Sell when Close < SMA20
-SELL_USE_PDI_MDI     = True   # Sell when PDI < MDI
-SELL_USE_STOP_LOSS   = True   # Sell at -STOP_LOSS_PCT
-SELL_USE_TRAILING    = True   # Sell on trailing stop (Smart Exit)
-SELL_USE_PROFIT_TAKE = True   # Sell 50% on RSI climax (Smart Exit)
-SELL_USE_MONTH_END   = True   # Force close at month-end
-SCORE_REQUIRE_SPREAD = True   # Scorecard: include Spread > 0 (MFI > RSI) as 4th item
-# ---- Optional extra criteria (SMA50, OBV trend, VWAP) ----
-CORE_REQUIRE_SMA50       = False  # Core: require Close > SMA_50
-REQUIRE_OBV_ABOVE_EMA    = False  # Require OBV > OBV_EMA_20 (volume trend up)
-REQUIRE_CLOSE_ABOVE_VWAP = False  # Require Close > 20-day rolling VWAP
+# ---- BUY criteria: operator-based (override from Streamlit) ----
+CLOSE_VS_SMA20    = "off"   # "off" | ">" | "<" | ">=" | "<="
+CLOSE_VS_SMA50    = "off"
+OBV_VS_OBV_EMA20  = "off"
+CLOSE_VS_VWAP     = "off"
+MFI_VS_RSI        = "off"   # "off" | "mfi>rsi" | "rsi>mfi"
+CORE_REQUIRE_PDI_MDI = True
+CORE_REQUIRE_ADX_AWAKENING = False
+SELL_USE_ADX_EXHAUSTION    = False
+SELL_USE_SMA20       = True
+SELL_USE_PDI_MDI     = True
+SELL_USE_STOP_LOSS   = True
+SELL_USE_TRAILING    = True
+SELL_USE_PROFIT_TAKE = True
+SELL_USE_MONTH_END   = True
+# Legacy (used by Strategy class / print only; BUY logic uses operator criteria above)
+RSI_ENTRY, MFI_ENTRY, RVOL_MIN = 50, 55, 1.0
+SCORECARD_MIN, SCORE_REQUIRE_SPREAD = 3, True
 
 
 # ===========================================================================
@@ -305,15 +302,26 @@ def _last_trading_day_of_month(dates: pd.DatetimeIndex) -> set:
     return set(s.groupby(s.dt.to_period("M")).transform("max").values)
 
 
+def _check_op(left_val: float, right_val: float, op: str) -> bool:
+    """Apply operator: 'off'=skip (True), '>' '<' '>=' '<=' = compare. NaN => False."""
+    if op in (None, "", "off"):
+        return True
+    if pd.isna(left_val) or pd.isna(right_val):
+        return False
+    if op == ">":
+        return left_val > right_val
+    if op == "<":
+        return left_val < right_val
+    if op == ">=":
+        return left_val >= right_val
+    if op == "<=":
+        return left_val <= right_val
+    return True
+
+
 def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit: bool = True) -> List[Dict]:
     """
-    Veteran Logic: Core + Scorecard (MFI + Spread) with optional Smart Exit.
-
-    BUY:
-      CORE (all required): Close > SMA20, PDI > MDI, ADX > 20, ADX < 50.
-      SCORECARD (1 pt each, need 3 of 4): RSI>50, MFI>55, RVOL>=1.0, Spread>0 (MFI>RSI).
-      TRIGGER: CORE true AND score >= 3.
-
+    BUY: All selected criteria must be met (operator-based: Close vs SMA20/SMA50, OBV vs OBV_EMA_20, Close vs VWAP, MFI vs RSI; ADX range; PDI>MDI; 龍抬頭).
     SELL (use_smart_exit=True):
       1. Hard Exit: Close < SMA20 → SELL 100%
       2. Trailing Stop: Close < Highest_High - 3*ATR → SELL 100%
@@ -482,38 +490,32 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
                     position_ratio = 0.5
 
         # =============================================================
-        # STATE: NO POSITION → check buy conditions (Core + Scorecard)
+        # STATE: NO POSITION → check buy conditions (all criteria must pass)
         # =============================================================
         else:
-            # ---- CORE (all must be true where enabled): trend floor + not overheated ----
-            core_trend = (close > sma20) if CORE_REQUIRE_TREND else True
-            core_sma50 = (not CORE_REQUIRE_SMA50) or (pd.notna(sma50) and float(close) > float(sma50))
+            close_f = float(close)
+            sma20_f = float(sma20) if pd.notna(sma20) else None
+            sma50_f = float(sma50) if pd.notna(sma50) else None
+            obv_f = float(obv) if pd.notna(obv) else None
+            obv_ema_f = float(obv_ema_20) if pd.notna(obv_ema_20) else None
+            vwap_f = float(vwap) if pd.notna(vwap) else None
+            close_sma20_ok = _check_op(close_f, sma20_f, CLOSE_VS_SMA20)
+            close_sma50_ok = _check_op(close_f, sma50_f, CLOSE_VS_SMA50)
+            obv_ok = _check_op(obv_f, obv_ema_f, OBV_VS_OBV_EMA20)
+            close_vwap_ok = _check_op(close_f, vwap_f, CLOSE_VS_VWAP)
             core_pdi_mdi = (pdi > mdi + PDI_BUFFER) if CORE_REQUIRE_PDI_MDI else True
-            core_adx_floor = adx > ADX_MIN   # mandatory: trend must exist
-            core_adx_cap   = adx < ADX_MAX  # mandatory: not overheated
-            # 龍抬頭 (Trend Awakening): ADX was falling, now rising
+            core_adx_floor = adx > ADX_MIN
+            core_adx_cap   = adx < ADX_MAX
             adx_awakening = (slope_prev <= 0 and slope_curr > 0) if CORE_REQUIRE_ADX_AWAKENING else True
-            obv_ok = (not REQUIRE_OBV_ABOVE_EMA) or (pd.notna(obv) and pd.notna(obv_ema_20) and float(obv) > float(obv_ema_20))
-            vwap_ok = (not REQUIRE_CLOSE_ABOVE_VWAP) or (pd.notna(vwap) and float(close) > float(vwap))
-            core = core_trend and core_sma50 and core_pdi_mdi and core_adx_floor and core_adx_cap and adx_awakening and obv_ok and vwap_ok
+            mfi_rsi_ok = True
+            if MFI_VS_RSI == "mfi>rsi" and not pd.isna(mfi) and not pd.isna(rsi):
+                mfi_rsi_ok = float(mfi) > float(rsi)
+            elif MFI_VS_RSI == "rsi>mfi" and not pd.isna(mfi) and not pd.isna(rsi):
+                mfi_rsi_ok = float(rsi) > float(mfi)
+            core = (close_sma20_ok and close_sma50_ok and obv_ok and close_vwap_ok and
+                    core_pdi_mdi and core_adx_floor and core_adx_cap and adx_awakening and mfi_rsi_ok)
 
-            # ---- SCORECARD (1 pt each): RSI, MFI, RVOL, optionally Spread>0 ----
-            score = 0
-            score_parts = []
-            if rsi > RSI_ENTRY:
-                score += 1
-                score_parts.append("RSI")
-            if not pd.isna(mfi) and mfi > MFI_ENTRY:
-                score += 1
-                score_parts.append("MFI")
-            if rvol >= RVOL_MIN:
-                score += 1
-                score_parts.append("RVOL")
-            if SCORE_REQUIRE_SPREAD and not pd.isna(spread) and spread > 0:
-                score += 1
-                score_parts.append("Spread")
-
-            buy_signal = core and (score >= SCORECARD_MIN)
+            buy_signal = core
             if buy_signal:
                 in_position = True
                 position_ratio = 1.0
@@ -532,28 +534,25 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
                 entry_obv = float(obv) if pd.notna(obv) else None
                 entry_obv_ema_20 = float(obv_ema_20) if pd.notna(obv_ema_20) else None
                 entry_vwap = float(vwap) if pd.notna(vwap) else None
-                # Build entry reason: Core + Score
                 core_parts = []
-                if CORE_REQUIRE_TREND:
-                    core_parts.append("Close>SMA20")
+                if CLOSE_VS_SMA20 not in (None, "", "off"):
+                    core_parts.append(f"Close{CLOSE_VS_SMA20}SMA20")
+                if CLOSE_VS_SMA50 not in (None, "", "off"):
+                    core_parts.append(f"Close{CLOSE_VS_SMA50}SMA50")
+                if OBV_VS_OBV_EMA20 not in (None, "", "off"):
+                    core_parts.append(f"OBV{OBV_VS_OBV_EMA20}OBV_EMA20")
+                if CLOSE_VS_VWAP not in (None, "", "off"):
+                    core_parts.append(f"Close{CLOSE_VS_VWAP}VWAP")
+                if MFI_VS_RSI not in (None, "", "off"):
+                    core_parts.append(MFI_VS_RSI)
                 if CORE_REQUIRE_PDI_MDI:
                     core_parts.append(f"PDI>MDI+{PDI_BUFFER}" if PDI_BUFFER != 0 else "PDI>MDI")
                 core_parts.append(f"ADX{ADX_MIN}-{ADX_MAX}")
                 if CORE_REQUIRE_ADX_AWAKENING:
                     core_parts.append("龍抬頭")
-                if CORE_REQUIRE_SMA50:
-                    core_parts.append("Close>SMA50")
-                if REQUIRE_OBV_ABOVE_EMA:
-                    core_parts.append("OBV>OBV_EMA20")
-                if REQUIRE_CLOSE_ABOVE_VWAP:
-                    core_parts.append("Close>VWAP")
-                score_max = 4 if SCORE_REQUIRE_SPREAD else 3
-                entry_reason = "Core: " + ",".join(core_parts) + f" | Score {score}/{score_max}: " + ",".join(score_parts)
+                entry_reason = " | ".join(core_parts)
                 if verbose:
-                    score_max = 4 if SCORE_REQUIRE_SPREAD else 3
-                    print(f"  >>> BUY  {date.strftime('%Y-%m-%d')}  "
-                          f"Close={close:.2f}  ADX={adx:.1f}  RSI={rsi:.1f}  MFI={mfi:.1f}  RVOL={rvol:.2f}  "
-                          f"Score={score}/{score_max}  Spread={spread:.1f}  PDI={pdi:.1f}  MDI={mdi:.1f}")
+                    print(f"  >>> BUY  {date.strftime('%Y-%m-%d')}  Close={close:.2f}  ADX={adx:.1f}  PDI={pdi:.1f}  MDI={mdi:.1f}")
 
     # If still in position at last bar, force close
     if in_position:

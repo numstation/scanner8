@@ -134,29 +134,42 @@ def _fetch_ohlcv(ticker: str, period: str = "6mo") -> pd.DataFrame | None:
         return None
 
 
+def _check_op(left_val: float, right_val: float, op: str) -> bool:
+    """Apply operator: 'off'=skip (True), '>' '<' '>=' '<=' = compare. NaN => False."""
+    if op in (None, "", "off"):
+        return True
+    if pd.isna(left_val) or pd.isna(right_val):
+        return False
+    if op == ">":
+        return left_val > right_val
+    if op == "<":
+        return left_val < right_val
+    if op == ">=":
+        return left_val >= right_val
+    if op == "<=":
+        return left_val <= right_val
+    return True
+
+
 def analyze_stock(
     ticker: str,
     *,
     period: str = "6mo",
-    core_require_trend: bool = True,
+    close_vs_sma20: str = "off",
+    close_vs_sma50: str = "off",
+    obv_vs_obv_ema20: str = "off",
+    close_vs_vwap: str = "off",
+    mfi_vs_rsi: str = "off",
     core_require_pdi_mdi: bool = True,
     pdi_buffer: float = 0.0,
     adx_min: int = 20,
     adx_max: int = 50,
     core_require_adx_awakening: bool = False,
-    rsi_entry: int = 50,
-    mfi_entry: int = 55,
-    rvol_min: float = 1.0,
-    require_spread: bool = True,
-    scorecard_min: int = 3,
     rsi_profit_take: int = 75,
     sell_use_sma20: bool = True,
     sell_use_pdi_mdi: bool = True,
     sell_use_adx_exhaustion: bool = False,
     sell_use_profit_take: bool = True,
-    core_require_sma50: bool = False,
-    require_obv_above_ema: bool = False,
-    require_close_above_vwap: bool = False,
 ) -> dict | None:
     """
     One stock: download 6mo, compute indicators with ta library, apply Veteran v4.0.
@@ -200,9 +213,20 @@ def analyze_stock(
         if adx is None or pdi is None or mdi is None:
             return None
 
-        # CORE (configurable)
-        trend_ok = (not core_require_trend) or (float(curr["Close"]) > float(curr["SMA20"]))
-        sma50_ok = (not core_require_sma50) or (pd.notna(curr.get("SMA_50")) and float(curr["Close"]) > float(curr["SMA_50"]))
+        # CORE (all enabled criteria must pass)
+        close_f = float(curr["Close"])
+        sma20_f = float(curr["SMA20"]) if pd.notna(curr.get("SMA20")) else None
+        sma50_f = float(curr["SMA_50"]) if pd.notna(curr.get("SMA_50")) else None
+        obv_f = float(curr["OBV"]) if pd.notna(curr.get("OBV")) else None
+        obv_ema_f = float(curr["OBV_EMA_20"]) if pd.notna(curr.get("OBV_EMA_20")) else None
+        vwap_f = float(curr["VWAP"]) if pd.notna(curr.get("VWAP")) else None
+        rsi_f = float(curr["RSI"]) if pd.notna(curr.get("RSI")) else None
+        mfi_f = float(curr["MFI"]) if pd.notna(curr.get("MFI")) else None
+
+        close_sma20_ok = _check_op(close_f, sma20_f, close_vs_sma20)
+        close_sma50_ok = _check_op(close_f, sma50_f, close_vs_sma50)
+        obv_ok = _check_op(obv_f, obv_ema_f, obv_vs_obv_ema20)
+        close_vwap_ok = _check_op(close_f, vwap_f, close_vs_vwap)
         adx_ok = adx_min < adx < adx_max
         pdi_ok = (not core_require_pdi_mdi) or (pdi > mdi + float(pdi_buffer))
         adx_prev = curr.get("ADX_prev")
@@ -210,35 +234,24 @@ def analyze_stock(
         slope_curr = float(adx - adx_prev) if pd.notna(adx_prev) else 0.0
         slope_prev = float(adx_prev - adx_prev2) if pd.notna(adx_prev) and pd.notna(adx_prev2) else 0.0
         adx_awakening = (slope_prev <= 0 and slope_curr > 0) if core_require_adx_awakening else True
-        obv_ok = (not require_obv_above_ema) or (pd.notna(curr.get("OBV")) and pd.notna(curr.get("OBV_EMA_20")) and float(curr["OBV"]) > float(curr["OBV_EMA_20"]))
-        vwap_ok = (not require_close_above_vwap) or (pd.notna(curr.get("VWAP")) and float(curr["Close"]) > float(curr["VWAP"]))
-        core_pass = trend_ok and sma50_ok and adx_ok and pdi_ok and adx_awakening and obv_ok and vwap_ok
+        mfi_rsi_ok = True
+        if mfi_vs_rsi == "mfi>rsi" and rsi_f is not None and mfi_f is not None:
+            mfi_rsi_ok = mfi_f > rsi_f
+        elif mfi_vs_rsi == "rsi>mfi" and rsi_f is not None and mfi_f is not None:
+            mfi_rsi_ok = rsi_f > mfi_f
+        core_pass = close_sma20_ok and close_sma50_ok and obv_ok and close_vwap_ok and adx_ok and pdi_ok and adx_awakening and mfi_rsi_ok
 
-        # SCORECARD (configurable): RSI, MFI, RVOL, Spread>0
-        score = 0
         details = []
-        if float(curr["RSI"]) > rsi_entry:
-            score += 1
-            details.append("RSI")
-        if pd.notna(curr.get("MFI")) and float(curr["MFI"]) > mfi_entry:
-            score += 1
-            details.append("MFI")
-        if pd.notna(curr.get("RVOL")) and float(curr["RVOL"]) >= rvol_min:
-            score += 1
-            details.append("RVOL")
-        spread_val = curr.get("Spread")
-        if require_spread and pd.notna(spread_val) and float(spread_val) > 0:
-            score += 1
-            details.append("Spread")
 
         signal = None
-        close_curr = float(curr["Close"])
+        close_curr = close_f
         open_curr = float(curr["Open"])
-        sma20_curr = float(curr["SMA20"])
+        sma20_curr = sma20_f or 0
+        spread_val = curr.get("Spread")
 
-        if core_pass and score >= scorecard_min:
-            score_max = 4 if require_spread else 3
-            signal = f"BUY ({score}/{score_max})"
+        if core_pass:
+            signal = "BUY"
+            details = ["Core"]
         elif sell_use_profit_take and close_curr > sma20_curr and float(curr["RSI"]) > rsi_profit_take and close_curr < open_curr:
             signal = "PROFIT TAKE"
             details = [f"RSI>{rsi_profit_take}", "Bearish"]

@@ -45,7 +45,7 @@ st.set_page_config(
 )
 
 st.title("📊 Numstation Stock Scanner & Backtest")
-st.caption("Core: Close>SMA20, 20<ADX<50, PDI>MDI  |  Score 3/4: RSI>50, MFI>55, RVOL≥1.0, Spread>0  |  Optional: SMA(50), OBV>OBV_EMA_20, Close>VWAP")
+st.caption("BUY: all selected criteria must be met. Choose operators (>, <, >=, <=) or Off. MFI vs RSI: Off | MFI>RSI | RSI>MFI.")
 
 tab_scan, tab_backtest = st.tabs(["Scanner", "Backtest"])
 
@@ -95,32 +95,25 @@ with tab_scan:
         help="How much history to fetch for each ticker when scanning.",
     )
 
-    # Core & Scorecard (all BUY criteria in one section)
-    with st.expander("Adjust Core & Scorecard (BUY criteria)", expanded=False):
-        st.caption("Core: trend/ADX. Scorecard: adjustable params; trigger = min score of active items.")
-        sc1, sc2, sc3 = st.columns(3)
+    # BUY criteria: all selected conditions must be met
+    OPTS = ["Off", ">", "<", ">=", "<="]
+    with st.expander("Adjust BUY criteria", expanded=False):
+        st.caption("All selected criteria must be met. Choose operator or Off to skip.")
+        sc1, sc2 = st.columns(2)
         with sc1:
-            st.markdown("**Core**")
-            scan_core_trend = st.checkbox("Require Close > SMA20", value=False, key="scan_core_trend")
+            st.markdown("**Comparisons (Off = not used)**")
+            scan_close_vs_sma20 = st.selectbox("Close vs SMA20", OPTS, index=0, key="scan_close_sma20")
+            scan_close_vs_sma50 = st.selectbox("Close vs SMA(50)", OPTS, index=0, key="scan_close_sma50")
+            scan_obv_vs_obv_ema20 = st.selectbox("OBV vs OBV_EMA_20", OPTS, index=0, key="scan_obv_ema")
+            scan_close_vs_vwap = st.selectbox("Close vs VWAP (20d)", OPTS, index=0, key="scan_close_vwap")
+            scan_mfi_vs_rsi = st.selectbox("MFI vs RSI", ["Off", "MFI > RSI", "RSI > MFI"], index=0, key="scan_mfi_rsi")
+        with sc2:
+            st.markdown("**ADX & PDI**")
             scan_core_pdi_mdi = st.checkbox("Require PDI > MDI", value=False, key="scan_core_pdi_mdi")
             scan_pdi_buffer = st.number_input("PDI must exceed MDI by (≥)", min_value=-20.0, max_value=20.0, value=-10.0, step=0.5, format="%.1f", key="scan_pdi_buffer", help="Negative = allow MDI>PDI")
-            scan_adx_min = st.number_input("ADX min", min_value=0, max_value=40, value=10, step=1, key="scan_adx_min")
-            scan_adx_max = st.number_input("ADX max", min_value=30, max_value=70, value=50, step=1, key="scan_adx_max")
+            scan_adx_min = st.number_input("ADX min", min_value=0, value=10, step=1, key="scan_adx_min", help="No upper limit")
+            scan_adx_max = st.number_input("ADX max", min_value=1, max_value=100, value=50, step=1, key="scan_adx_max")
             scan_adx_awakening = st.checkbox("龍抬頭 (ADX down→up)", value=True, key="scan_adx_awakening", help="Require ADX slope turning from down to up")
-            scan_core_sma50 = st.checkbox("Require Close > SMA(50)", value=False, key="scan_core_sma50")
-            scan_require_obv_above_ema = st.checkbox("Require OBV > OBV_EMA_20", value=False, key="scan_obv_ema", help="Volume trend rising")
-            scan_require_close_above_vwap = st.checkbox("Require Close > VWAP (20d)", value=False, key="scan_close_vwap", help="Price above 20-day rolling VWAP")
-        with sc2:
-            st.markdown("**Scorecard (1 pt each)**")
-            scan_rsi_entry = st.number_input("RSI >", min_value=30, max_value=70, value=50, step=1, key="scan_rsi_entry")
-            scan_mfi_entry = st.number_input("MFI >", min_value=30, max_value=70, value=55, step=1, key="scan_mfi_entry")
-            scan_rvol_min = st.number_input("RVOL ≥", min_value=0.5, max_value=2.0, value=1.0, step=0.1, format="%.1f", key="scan_rvol_min")
-            scan_require_spread = st.checkbox("Spread > 0 (MFI > RSI)", value=True, key="scan_require_spread", help="Institutional accumulation; when unchecked, 3 items only")
-        with sc3:
-            st.markdown("**Trigger**")
-            scan_score_max = 4 if scan_require_spread else 3
-            scan_scorecard_min = st.slider("Score ≥", min_value=1, max_value=4, value=3, key="scan_scorecard_min")
-            st.caption(f"Need ≥ {scan_scorecard_min} of {scan_score_max} (RSI, MFI, RVOL" + (", Spread" if scan_require_spread else "") + ")")
 
     with st.expander("Adjust sell rules", expanded=False):
         st.caption("Turn exit conditions on/off. Same layout as Backtest. Scanner uses: SMA20, PDI<MDI, Profit take.")
@@ -145,27 +138,25 @@ with tab_scan:
             progress = st.progress(0, text="Scanning...")
             results = []
             n = len(tickers)
+            _op = lambda x: "off" if x == "Off" else x
+            _mfi = lambda x: "off" if x == "Off" else ("mfi>rsi" if x == "MFI > RSI" else "rsi>mfi")
             scan_kwargs = {
                 "period": scan_period,
-                "core_require_trend": scan_core_trend,
+                "close_vs_sma20": _op(scan_close_vs_sma20),
+                "close_vs_sma50": _op(scan_close_vs_sma50),
+                "obv_vs_obv_ema20": _op(scan_obv_vs_obv_ema20),
+                "close_vs_vwap": _op(scan_close_vs_vwap),
+                "mfi_vs_rsi": _mfi(scan_mfi_vs_rsi),
                 "core_require_pdi_mdi": scan_core_pdi_mdi,
                 "pdi_buffer": float(scan_pdi_buffer),
                 "adx_min": int(scan_adx_min),
                 "adx_max": int(scan_adx_max),
                 "core_require_adx_awakening": scan_adx_awakening,
-                "rsi_entry": int(scan_rsi_entry),
-                "mfi_entry": int(scan_mfi_entry),
-                "rvol_min": float(scan_rvol_min),
-                "require_spread": scan_require_spread,
-                "scorecard_min": int(scan_scorecard_min),
                 "rsi_profit_take": int(scan_rsi_profit_take),
                 "sell_use_sma20": scan_sell_sma20,
                 "sell_use_pdi_mdi": scan_sell_pdi_mdi,
                 "sell_use_adx_exhaustion": scan_sell_adx_exhaustion,
                 "sell_use_profit_take": scan_sell_profit_take,
-                "core_require_sma50": scan_core_sma50,
-                "require_obv_above_ema": scan_require_obv_above_ema,
-                "require_close_above_vwap": scan_require_close_above_vwap,
             }
             # Only pass kwargs that analyze_stock accepts (handles older deployed versions)
             sig = inspect.signature(analyze_stock)
@@ -237,31 +228,24 @@ with tab_backtest:
     with col3:
         use_smart_exit = st.checkbox("Smart exit (trail + profit take)", value=True, key="bt_smart")
 
-    with st.expander("Adjust Core & Scorecard (BUY criteria)", expanded=False):
-        st.caption("Core: trend/ADX. Scorecard: adjustable params; trigger = min score of active items.")
-        c1, c2, c3 = st.columns(3)
+    BT_OPTS = ["Off", ">", "<", ">=", "<="]
+    with st.expander("Adjust BUY criteria", expanded=False):
+        st.caption("All selected criteria must be met. Choose operator or Off to skip.")
+        c1, c2 = st.columns(2)
         with c1:
-            st.markdown("**Core**")
-            core_require_trend = st.checkbox("Require Close > SMA20", value=False, key="core_trend")
+            st.markdown("**Comparisons (Off = not used)**")
+            close_vs_sma20 = st.selectbox("Close vs SMA20", BT_OPTS, index=0, key="bt_close_sma20")
+            close_vs_sma50 = st.selectbox("Close vs SMA(50)", BT_OPTS, index=0, key="bt_close_sma50")
+            obv_vs_obv_ema20 = st.selectbox("OBV vs OBV_EMA_20", BT_OPTS, index=0, key="bt_obv_ema")
+            close_vs_vwap = st.selectbox("Close vs VWAP (20d)", BT_OPTS, index=0, key="bt_close_vwap")
+            mfi_vs_rsi = st.selectbox("MFI vs RSI", ["Off", "MFI > RSI", "RSI > MFI"], index=0, key="bt_mfi_rsi")
+        with c2:
+            st.markdown("**ADX & PDI**")
             core_require_pdi_mdi = st.checkbox("Require PDI > MDI", value=False, key="core_pdi_mdi")
             pdi_buffer = st.number_input("PDI must exceed MDI by (≥)", min_value=-20.0, max_value=20.0, value=-10.0, step=0.5, format="%.1f", key="pdi_buffer", help="Negative = allow MDI>PDI")
-            adx_min = st.number_input("ADX min (trend floor)", min_value=0, max_value=40, value=10, step=1, key="adx_min")
-            adx_max = st.number_input("ADX max (not overheated)", min_value=30, max_value=70, value=50, step=1, key="adx_max")
+            adx_min = st.number_input("ADX min", min_value=0, value=10, step=1, key="adx_min", help="No upper limit")
+            adx_max = st.number_input("ADX max", min_value=1, max_value=100, value=50, step=1, key="adx_max")
             core_require_adx_awakening = st.checkbox("龍抬頭 (ADX down→up)", value=True, key="core_adx_awakening", help="Require ADX slope turning from down to up")
-            core_require_sma50 = st.checkbox("Require Close > SMA(50)", value=False, key="bt_core_sma50")
-            require_obv_above_ema = st.checkbox("Require OBV > OBV_EMA_20", value=False, key="bt_obv_ema", help="Volume trend rising")
-            require_close_above_vwap = st.checkbox("Require Close > VWAP (20d)", value=False, key="bt_close_vwap", help="Price above 20-day rolling VWAP")
-        with c2:
-            st.markdown("**Scorecard (1 pt each)**")
-            rsi_entry = st.number_input("RSI > (momentum)", min_value=30, max_value=70, value=50, step=1, key="rsi_entry")
-            mfi_entry = st.number_input("MFI > (money flow)", min_value=30, max_value=70, value=55, step=1, key="mfi_entry")
-            rvol_min = st.number_input("RVOL ≥ (volume)", min_value=0.5, max_value=2.0, value=1.0, step=0.1, format="%.1f", key="rvol_min")
-            score_require_spread = st.checkbox("Spread > 0 (MFI > RSI)", value=True, key="score_require_spread", help="Institutional accumulation; when unchecked, 3 items only")
-        with c3:
-            st.markdown("**Trigger**")
-            scorecard_min = st.slider("Score ≥", min_value=1, max_value=4, value=3, key="scorecard_min")
-            score_max = 4 if score_require_spread else 3
-            st.caption(f"Need ≥ {scorecard_min} of {score_max} (RSI, MFI, RVOL" + (", Spread" if score_require_spread else "") + ")")
 
     with st.expander("Adjust sell rules", expanded=False):
         st.caption("Turn exit conditions on/off and edit parameters. Order: SMA20 → Trailing → Profit take → PDI<MDI → Stop loss → Month-end.")
@@ -289,20 +273,18 @@ with tab_backtest:
             with st.spinner(f"Fetching {symbol} and running backtest..."):
                 try:
                     # Apply user criteria to the backtest module before running
-                    _bt.CORE_REQUIRE_TREND = core_require_trend
+                    _op = lambda x: "off" if x == "Off" else x
+                    _mfi = lambda x: "off" if x == "Off" else ("mfi>rsi" if x == "MFI > RSI" else "rsi>mfi")
+                    _bt.CLOSE_VS_SMA20 = _op(close_vs_sma20)
+                    _bt.CLOSE_VS_SMA50 = _op(close_vs_sma50)
+                    _bt.OBV_VS_OBV_EMA20 = _op(obv_vs_obv_ema20)
+                    _bt.CLOSE_VS_VWAP = _op(close_vs_vwap)
+                    _bt.MFI_VS_RSI = _mfi(mfi_vs_rsi)
                     _bt.CORE_REQUIRE_PDI_MDI = core_require_pdi_mdi
                     _bt.PDI_BUFFER = float(pdi_buffer)
                     _bt.ADX_MIN = int(adx_min)
                     _bt.ADX_MAX = int(adx_max)
                     _bt.CORE_REQUIRE_ADX_AWAKENING = core_require_adx_awakening
-                    _bt.CORE_REQUIRE_SMA50 = core_require_sma50
-                    _bt.REQUIRE_OBV_ABOVE_EMA = require_obv_above_ema
-                    _bt.REQUIRE_CLOSE_ABOVE_VWAP = require_close_above_vwap
-                    _bt.RSI_ENTRY = int(rsi_entry)
-                    _bt.MFI_ENTRY = int(mfi_entry)
-                    _bt.RVOL_MIN = float(rvol_min)
-                    _bt.SCORE_REQUIRE_SPREAD = score_require_spread
-                    _bt.SCORECARD_MIN = int(scorecard_min)
                     _bt.SELL_USE_ADX_EXHAUSTION = sell_use_adx_exhaustion
                     _bt.SELL_USE_SMA20 = sell_use_sma20
                     _bt.SELL_USE_PDI_MDI = sell_use_pdi_mdi
