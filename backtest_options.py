@@ -236,12 +236,14 @@ def _mfi(high: pd.Series, low: pd.Series, close: pd.Series, volume: pd.Series, l
 def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
     Compute all indicators needed for the Veteran strategy:
-      SMA20, RSI14, ADX, ADX_prev, PDI, MDI, OBV, OBV_SMA20, RVOL
+      SMA20, SMA_50, RSI14, ADX, ADX_prev, PDI, MDI,
+      OBV, OBV_SMA20, OBV_EMA_20, RVOL, MFI14, Spread, ATR14, VWAP
     """
     c, h, l, v = df["Close"], df["High"], df["Low"], df["Volume"]
 
     # ---- Trend ----
-    df["SMA20"] = ta.sma(c, length=20) if _HAS_PANDAS_TA else _sma(c, 20)
+    df["SMA20"]  = ta.sma(c, length=20) if _HAS_PANDAS_TA else _sma(c, 20)
+    df["SMA_50"] = ta.sma(c, length=50) if _HAS_PANDAS_TA else _sma(c, 50)
 
     # ---- Momentum ----
     df["RSI14"] = ta.rsi(c, length=14) if _HAS_PANDAS_TA else _rsi(c, 14)
@@ -261,9 +263,10 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["ADX_prev"] = df["ADX"].shift(1)
     df["ADX_prev2"] = df["ADX"].shift(2)
 
-    # ---- Volume: OBV and OBV_SMA20 (volume trend confirmation) ----
-    df["OBV"] = ta.obv(c, v) if _HAS_PANDAS_TA else _obv(c, v)
-    df["OBV_SMA20"] = (ta.sma(df["OBV"], length=20) if _HAS_PANDAS_TA else _sma(df["OBV"], 20))
+    # ---- Volume: OBV, OBV_SMA20, OBV_EMA_20 (volume trend confirmation) ----
+    df["OBV"]       = ta.obv(c, v) if _HAS_PANDAS_TA else _obv(c, v)
+    df["OBV_SMA20"] = ta.sma(df["OBV"], length=20) if _HAS_PANDAS_TA else _sma(df["OBV"], 20)
+    df["OBV_EMA_20"] = df["OBV"].ewm(span=20, adjust=False).mean()
 
     df["AvgVol20"] = ta.sma(v, length=20) if _HAS_PANDAS_TA else _sma(v, 20)
     df["RVOL"] = v / df["AvgVol20"].replace(0, np.nan)
@@ -280,6 +283,11 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
     # ---- Volatility (for Smart Exit trailing stop) ----
     df["ATR14"] = ta.atr(h, l, c, length=14) if _HAS_PANDAS_TA else _atr(h, l, c, 14)
+
+    # ---- VWAP: 20-day rolling (Typical Price × Volume / Volume) — swing-trade cost anchor ----
+    _tp = (h + l + c) / 3
+    df["VWAP"] = (_tp * v).rolling(window=20, min_periods=20).sum() / \
+                 v.rolling(window=20, min_periods=20).sum()
 
     return df
 

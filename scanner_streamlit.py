@@ -30,6 +30,7 @@ try:
         TECH_TICKERS,
         HSI_TICKERS,
         HKCEI_TICKERS,
+        HK_TICKERS,
         US_TICKERS,
     )
 except ImportError as e:
@@ -51,9 +52,10 @@ tab_scan, tab_backtest = st.tabs(["Scanner", "Backtest"])
 # ========== TAB 1: Scanner ==========
 with tab_scan:
     st.sidebar.header("Ticker source")
+    source_options = ["Tech", "HSI", "HKCEI", "HK (all)", "US stocks", "Custom (type below)"]
     source = st.sidebar.radio(
         "Choose list",
-        ["Tech", "HSI", "HKCEI", "US stocks", "Custom (type below)"],
+        source_options,
         index=0,
     )
 
@@ -67,6 +69,9 @@ with tab_scan:
     elif source == "HKCEI":
         tickers = HKCEI_TICKERS.copy()
         st.sidebar.info(f"Using {len(tickers)} HKCEI tickers.")
+    elif source == "HK (all)":
+        tickers = HK_TICKERS.copy()
+        st.sidebar.info(f"Using {len(tickers)} HK tickers (Tech+HSI+HKCEI).")
     elif source == "US stocks":
         tickers = US_TICKERS.copy()
         st.sidebar.info(f"Using {len(tickers)} US tickers.")
@@ -81,6 +86,14 @@ with tab_scan:
             tickers = [t.strip().upper() for t in raw if t.strip()]
         if not tickers and source == "Custom (type below)":
             st.sidebar.warning("Enter at least one ticker.")
+
+    scan_period = st.sidebar.selectbox(
+        "Data lookback",
+        ["3mo", "6mo", "1y", "2y"],
+        index=1,
+        key="scan_period",
+        help="How much history to fetch for each ticker when scanning.",
+    )
 
     # Core & Scorecard (all BUY criteria in one section)
     with st.expander("Adjust Core & Scorecard (BUY criteria)", expanded=False):
@@ -130,6 +143,7 @@ with tab_scan:
             results = []
             n = len(tickers)
             scan_kwargs = {
+                "period": scan_period,
                 "core_require_trend": scan_core_trend,
                 "core_require_pdi_mdi": scan_core_pdi_mdi,
                 "pdi_buffer": float(scan_pdi_buffer),
@@ -207,7 +221,13 @@ with tab_backtest:
     with col1:
         symbol = st.text_input("Ticker", value="9988.HK", key="bt_symbol", placeholder="0700.HK or NVDA")
     with col2:
-        period = st.selectbox("Period", ["1y", "6mo", "2y"], index=0, key="bt_period")
+        period = st.selectbox(
+            "Period",
+            ["3mo", "6mo", "1y", "2y", "5y", "10y", "max"],
+            index=2,
+            key="bt_period",
+            help="How much history to use for the backtest (yfinance).",
+        )
     with col3:
         use_smart_exit = st.checkbox("Smart exit (trail + profit take)", value=True, key="bt_smart")
 

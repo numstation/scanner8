@@ -137,6 +137,7 @@ def _fetch_ohlcv(ticker: str, period: str = "6mo") -> pd.DataFrame | None:
 def analyze_stock(
     ticker: str,
     *,
+    period: str = "6mo",
     core_require_trend: bool = True,
     core_require_pdi_mdi: bool = True,
     pdi_buffer: float = 0.0,
@@ -160,7 +161,7 @@ def analyze_stock(
     All criteria params are optional; defaults match Veteran v4.0.
     """
     try:
-        df = _fetch_ohlcv(ticker)
+        df = _fetch_ohlcv(ticker, period=period)
         if df is None or len(df) < 50:
             return None
 
