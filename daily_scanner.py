@@ -154,6 +154,9 @@ def analyze_stock(
     sell_use_pdi_mdi: bool = True,
     sell_use_adx_exhaustion: bool = False,
     sell_use_profit_take: bool = True,
+    core_require_sma50: bool = False,
+    require_obv_above_ema: bool = False,
+    require_close_above_vwap: bool = False,
 ) -> dict | None:
     """
     One stock: download 6mo, compute indicators with ta library, apply Veteran v4.0.
@@ -169,6 +172,7 @@ def analyze_stock(
 
         # Indicators using ta library (no pandas_ta / numba)
         df["SMA20"] = SMAIndicator(close=c, window=20).sma_indicator()
+        df["SMA_50"] = SMAIndicator(close=c, window=50).sma_indicator()
         df["RSI"] = RSIIndicator(close=c, window=14).rsi()
         df["MFI"] = MFIIndicator(high=h, low=l, close=c, volume=v, window=14).money_flow_index()
         adx_ind = ADXIndicator(high=h, low=l, close=c, window=14)
@@ -180,6 +184,14 @@ def analyze_stock(
         df["Spread"] = df["MFI"] - df["RSI"]
         df["ADX_prev"] = df["ADX"].shift(1)
         df["ADX_prev2"] = df["ADX"].shift(2)
+        # OBV: if Close > prev Close add Volume, else subtract
+        diff = c.diff()
+        obv_direction = (diff > 0).astype(float) - (diff < 0).astype(float)
+        df["OBV"] = (obv_direction.fillna(0) * v).cumsum()
+        df["OBV_EMA_20"] = df["OBV"].ewm(span=20, adjust=False).mean()
+        # VWAP: 20-day rolling (Typical Price * Volume) / Volume, Typical = (H+L+C)/3
+        typical = (h + l + c) / 3
+        df["VWAP"] = (typical * v).rolling(window=20, min_periods=20).sum() / v.rolling(window=20, min_periods=20).sum()
 
         curr = df.iloc[-1]
         adx = float(curr["ADX"]) if pd.notna(curr["ADX"]) else None
@@ -190,6 +202,7 @@ def analyze_stock(
 
         # CORE (configurable)
         trend_ok = (not core_require_trend) or (float(curr["Close"]) > float(curr["SMA20"]))
+        sma50_ok = (not core_require_sma50) or (pd.notna(curr.get("SMA_50")) and float(curr["Close"]) > float(curr["SMA_50"]))
         adx_ok = adx_min < adx < adx_max
         pdi_ok = (not core_require_pdi_mdi) or (pdi > mdi + float(pdi_buffer))
         adx_prev = curr.get("ADX_prev")
@@ -197,7 +210,9 @@ def analyze_stock(
         slope_curr = float(adx - adx_prev) if pd.notna(adx_prev) else 0.0
         slope_prev = float(adx_prev - adx_prev2) if pd.notna(adx_prev) and pd.notna(adx_prev2) else 0.0
         adx_awakening = (slope_prev <= 0 and slope_curr > 0) if core_require_adx_awakening else True
-        core_pass = trend_ok and adx_ok and pdi_ok and adx_awakening
+        obv_ok = (not require_obv_above_ema) or (pd.notna(curr.get("OBV")) and pd.notna(curr.get("OBV_EMA_20")) and float(curr["OBV"]) > float(curr["OBV_EMA_20"]))
+        vwap_ok = (not require_close_above_vwap) or (pd.notna(curr.get("VWAP")) and float(curr["Close"]) > float(curr["VWAP"]))
+        core_pass = trend_ok and sma50_ok and adx_ok and pdi_ok and adx_awakening and obv_ok and vwap_ok
 
         # SCORECARD (configurable): RSI, MFI, RVOL, Spread>0
         score = 0
@@ -240,6 +255,10 @@ def analyze_stock(
         if signal:
             rvol_str = f"{curr['RVOL']:.2f}" if pd.notna(curr.get("RVOL")) else "—"
             mfi_str = f"{curr['MFI']:.1f}" if pd.notna(curr.get("MFI")) else "—"
+            sma50_str = f"{curr['SMA_50']:.2f}" if pd.notna(curr.get("SMA_50")) else "—"
+            obv_str = f"{curr['OBV']:,.0f}" if pd.notna(curr.get("OBV")) else "—"
+            obv_ema_str = f"{curr['OBV_EMA_20']:,.0f}" if pd.notna(curr.get("OBV_EMA_20")) else "—"
+            vwap_str = f"{curr['VWAP']:.2f}" if pd.notna(curr.get("VWAP")) else "—"
             return {
                 "Ticker": ticker,
                 "Price": f"{curr['Close']:.2f}",
@@ -253,6 +272,10 @@ def analyze_stock(
                 "MFI": mfi_str,
                 "RVOL": rvol_str,
                 "Spread": f"{float(spread_val):.1f}" if pd.notna(spread_val) else "—",
+                "SMA_50": sma50_str,
+                "OBV": obv_str,
+                "OBV_EMA_20": obv_ema_str,
+                "VWAP": vwap_str,
             }
     except Exception:
         return None

@@ -86,6 +86,10 @@ SELL_USE_TRAILING    = True   # Sell on trailing stop (Smart Exit)
 SELL_USE_PROFIT_TAKE = True   # Sell 50% on RSI climax (Smart Exit)
 SELL_USE_MONTH_END   = True   # Force close at month-end
 SCORE_REQUIRE_SPREAD = True   # Scorecard: include Spread > 0 (MFI > RSI) as 4th item
+# ---- Optional extra criteria (SMA50, OBV trend, VWAP) ----
+CORE_REQUIRE_SMA50       = False  # Core: require Close > SMA_50
+REQUIRE_OBV_ABOVE_EMA    = False  # Require OBV > OBV_EMA_20 (volume trend up)
+REQUIRE_CLOSE_ABOVE_VWAP = False  # Require Close > 20-day rolling VWAP
 
 
 # ===========================================================================
@@ -339,6 +343,10 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
     entry_spread = 0.0
     entry_reason = ""
     entry_slope = 0.0
+    entry_sma50 = 0.0
+    entry_obv = 0.0
+    entry_obv_ema_20 = 0.0
+    entry_vwap = 0.0
 
     def _append_trade(exit_reason: str, exit_price: float, pnl_ratio: float):
         nonlocal in_position, position_ratio
@@ -368,6 +376,10 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
             "E_RVOL":       round(entry_rvol, 2) if pd.notna(entry_rvol) else None,
             "E_MFI":        round(entry_mfi, 1) if pd.notna(entry_mfi) else None,
             "E_Spread":     round(entry_spread, 1),
+            "E_SMA_50":     round(entry_sma50, 2) if pd.notna(entry_sma50) else None,
+            "E_OBV":        round(entry_obv, 0) if pd.notna(entry_obv) else None,
+            "E_OBV_EMA_20": round(entry_obv_ema_20, 0) if pd.notna(entry_obv_ema_20) else None,
+            "E_VWAP":       round(entry_vwap, 2) if pd.notna(entry_vwap) else None,
         })
 
     for i in range(len(df)):
@@ -381,6 +393,10 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
         open_  = row["Open"]
         high   = row["High"]
         sma20  = row["SMA20"]
+        sma50  = row.get("SMA_50")
+        obv    = row.get("OBV")
+        obv_ema_20 = row.get("OBV_EMA_20")
+        vwap   = row.get("VWAP")
         rsi    = row["RSI14"]
         adx    = float(row["ADX"])
         adx_p  = float(row["ADX_prev"])
@@ -471,12 +487,15 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
         else:
             # ---- CORE (all must be true where enabled): trend floor + not overheated ----
             core_trend = (close > sma20) if CORE_REQUIRE_TREND else True
+            core_sma50 = (not CORE_REQUIRE_SMA50) or (pd.notna(sma50) and float(close) > float(sma50))
             core_pdi_mdi = (pdi > mdi + PDI_BUFFER) if CORE_REQUIRE_PDI_MDI else True
             core_adx_floor = adx > ADX_MIN   # mandatory: trend must exist
             core_adx_cap   = adx < ADX_MAX  # mandatory: not overheated
             # 龍抬頭 (Trend Awakening): ADX was falling, now rising
             adx_awakening = (slope_prev <= 0 and slope_curr > 0) if CORE_REQUIRE_ADX_AWAKENING else True
-            core = core_trend and core_pdi_mdi and core_adx_floor and core_adx_cap and adx_awakening
+            obv_ok = (not REQUIRE_OBV_ABOVE_EMA) or (pd.notna(obv) and pd.notna(obv_ema_20) and float(obv) > float(obv_ema_20))
+            vwap_ok = (not REQUIRE_CLOSE_ABOVE_VWAP) or (pd.notna(vwap) and float(close) > float(vwap))
+            core = core_trend and core_sma50 and core_pdi_mdi and core_adx_floor and core_adx_cap and adx_awakening and obv_ok and vwap_ok
 
             # ---- SCORECARD (1 pt each): RSI, MFI, RVOL, optionally Spread>0 ----
             score = 0
@@ -509,6 +528,10 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
                 entry_mfi  = mfi
                 entry_spread = spread
                 entry_slope = slope_curr
+                entry_sma50 = float(sma50) if pd.notna(sma50) else None
+                entry_obv = float(obv) if pd.notna(obv) else None
+                entry_obv_ema_20 = float(obv_ema_20) if pd.notna(obv_ema_20) else None
+                entry_vwap = float(vwap) if pd.notna(vwap) else None
                 # Build entry reason: Core + Score
                 core_parts = []
                 if CORE_REQUIRE_TREND:
@@ -518,6 +541,12 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
                 core_parts.append(f"ADX{ADX_MIN}-{ADX_MAX}")
                 if CORE_REQUIRE_ADX_AWAKENING:
                     core_parts.append("龍抬頭")
+                if CORE_REQUIRE_SMA50:
+                    core_parts.append("Close>SMA50")
+                if REQUIRE_OBV_ABOVE_EMA:
+                    core_parts.append("OBV>OBV_EMA20")
+                if REQUIRE_CLOSE_ABOVE_VWAP:
+                    core_parts.append("Close>VWAP")
                 score_max = 4 if SCORE_REQUIRE_SPREAD else 3
                 entry_reason = "Core: " + ",".join(core_parts) + f" | Score {score}/{score_max}: " + ",".join(score_parts)
                 if verbose:
@@ -556,6 +585,10 @@ def run_veteran_backtest(df: pd.DataFrame, verbose: bool = True, use_smart_exit:
             "E_RVOL":       round(entry_rvol, 2) if pd.notna(entry_rvol) else None,
             "E_MFI":        round(entry_mfi, 1) if pd.notna(entry_mfi) else None,
             "E_Spread":     round(entry_spread, 1),
+            "E_SMA_50":     round(entry_sma50, 2) if pd.notna(entry_sma50) else None,
+            "E_OBV":        round(entry_obv, 0) if pd.notna(entry_obv) else None,
+            "E_OBV_EMA_20": round(entry_obv_ema_20, 0) if pd.notna(entry_obv_ema_20) else None,
+            "E_VWAP":       round(entry_vwap, 2) if pd.notna(entry_vwap) else None,
         })
 
     return trades

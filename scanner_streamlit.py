@@ -45,7 +45,7 @@ st.set_page_config(
 )
 
 st.title("📊 Numstation Stock Scanner & Backtest")
-st.caption("Core: Close>SMA20, 20<ADX<50, PDI>MDI  |  Score 3/4: RSI>50, MFI>55, RVOL≥1.0, Spread>0")
+st.caption("Core: Close>SMA20, 20<ADX<50, PDI>MDI  |  Score 3/4: RSI>50, MFI>55, RVOL≥1.0, Spread>0  |  Optional: SMA(50), OBV>OBV_EMA_20, Close>VWAP")
 
 tab_scan, tab_backtest = st.tabs(["Scanner", "Backtest"])
 
@@ -107,6 +107,9 @@ with tab_scan:
             scan_adx_min = st.number_input("ADX min", min_value=0, max_value=40, value=10, step=1, key="scan_adx_min")
             scan_adx_max = st.number_input("ADX max", min_value=30, max_value=70, value=50, step=1, key="scan_adx_max")
             scan_adx_awakening = st.checkbox("龍抬頭 (ADX down→up)", value=True, key="scan_adx_awakening", help="Require ADX slope turning from down to up")
+            scan_core_sma50 = st.checkbox("Require Close > SMA(50)", value=False, key="scan_core_sma50")
+            scan_require_obv_above_ema = st.checkbox("Require OBV > OBV_EMA_20", value=False, key="scan_obv_ema", help="Volume trend rising")
+            scan_require_close_above_vwap = st.checkbox("Require Close > VWAP (20d)", value=False, key="scan_close_vwap", help="Price above 20-day rolling VWAP")
         with sc2:
             st.markdown("**Scorecard (1 pt each)**")
             scan_rsi_entry = st.number_input("RSI >", min_value=30, max_value=70, value=50, step=1, key="scan_rsi_entry")
@@ -160,6 +163,9 @@ with tab_scan:
                 "sell_use_pdi_mdi": scan_sell_pdi_mdi,
                 "sell_use_adx_exhaustion": scan_sell_adx_exhaustion,
                 "sell_use_profit_take": scan_sell_profit_take,
+                "core_require_sma50": scan_core_sma50,
+                "require_obv_above_ema": scan_require_obv_above_ema,
+                "require_close_above_vwap": scan_require_close_above_vwap,
             }
             # Only pass kwargs that analyze_stock accepts (handles older deployed versions)
             sig = inspect.signature(analyze_stock)
@@ -184,7 +190,7 @@ with tab_scan:
                 df = pd.DataFrame(results)
                 df[" "] = df["Signal"].apply(lambda s: "🟢" if "BUY" in s else ("🔴" if "SELL" in s else "🟠"))
                 # Match backtest table: signal + entry indicators (ADX, slope, PDI, MDI, RSI, MFI, RVOL)
-                cols = [" ", "Ticker", "Price", "Signal", "Why", "ADX", "ADX_Slope", "PDI", "MDI", "RSI", "MFI", "RVOL", "Spread"]
+                cols = [" ", "Ticker", "Price", "Signal", "Why", "ADX", "ADX_Slope", "PDI", "MDI", "RSI", "MFI", "RVOL", "Spread", "SMA_50", "OBV", "OBV_EMA_20", "VWAP"]
                 cols = [c for c in cols if c in df.columns]
                 st.dataframe(df[cols], use_container_width=True, hide_index=True)
             else:
@@ -242,6 +248,9 @@ with tab_backtest:
             adx_min = st.number_input("ADX min (trend floor)", min_value=0, max_value=40, value=10, step=1, key="adx_min")
             adx_max = st.number_input("ADX max (not overheated)", min_value=30, max_value=70, value=50, step=1, key="adx_max")
             core_require_adx_awakening = st.checkbox("龍抬頭 (ADX down→up)", value=True, key="core_adx_awakening", help="Require ADX slope turning from down to up")
+            core_require_sma50 = st.checkbox("Require Close > SMA(50)", value=False, key="bt_core_sma50")
+            require_obv_above_ema = st.checkbox("Require OBV > OBV_EMA_20", value=False, key="bt_obv_ema", help="Volume trend rising")
+            require_close_above_vwap = st.checkbox("Require Close > VWAP (20d)", value=False, key="bt_close_vwap", help="Price above 20-day rolling VWAP")
         with c2:
             st.markdown("**Scorecard (1 pt each)**")
             rsi_entry = st.number_input("RSI > (momentum)", min_value=30, max_value=70, value=50, step=1, key="rsi_entry")
@@ -286,6 +295,9 @@ with tab_backtest:
                     _bt.ADX_MIN = int(adx_min)
                     _bt.ADX_MAX = int(adx_max)
                     _bt.CORE_REQUIRE_ADX_AWAKENING = core_require_adx_awakening
+                    _bt.CORE_REQUIRE_SMA50 = core_require_sma50
+                    _bt.REQUIRE_OBV_ABOVE_EMA = require_obv_above_ema
+                    _bt.REQUIRE_CLOSE_ABOVE_VWAP = require_close_above_vwap
                     _bt.RSI_ENTRY = int(rsi_entry)
                     _bt.MFI_ENTRY = int(mfi_entry)
                     _bt.RVOL_MIN = float(rvol_min)
@@ -339,7 +351,7 @@ with tab_backtest:
                             d2.metric("Avg Win %", f"{avg_win:+.2f}%", None)
                             d3.metric("Avg Loss %", f"{avg_loss:+.2f}%", None)
 
-                            log_cols = ["Entry_Date", "Entry_Price", "Entry_Reason", "E_ADX", "E_ADX_Slope", "E_PDI", "E_MDI", "E_RSI", "E_MFI", "E_RVOL", "E_Spread", "Exit_Date", "Exit_Price", "Exit_Reason", "Hold_Days", "PnL", "PnL%", "Result"]
+                            log_cols = ["Entry_Date", "Entry_Price", "Entry_Reason", "E_ADX", "E_ADX_Slope", "E_PDI", "E_MDI", "E_RSI", "E_MFI", "E_RVOL", "E_Spread", "E_SMA_50", "E_OBV", "E_OBV_EMA_20", "E_VWAP", "Exit_Date", "Exit_Price", "Exit_Reason", "Hold_Days", "PnL", "PnL%", "Result"]
                             log_cols = [c for c in log_cols if c in tdf.columns]
                             st.dataframe(tdf[log_cols], use_container_width=True, hide_index=True)
                 except Exception as e:
